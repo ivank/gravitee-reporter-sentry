@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Sentry Reporter",
+  "description": "Reports API gateway metrics, logs and errors to Sentry.io",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "default": true
+    },
+    "dsn": {
+      "type": "string",
+      "title": "Sentry DSN",
+      "description": "Sentry project DSN URL (e.g. https://key@o123.ingest.sentry.io/456)"
+    },
+    "environment": {
+      "type": "string",
+      "title": "Environment",
+      "description": "Sentry environment tag (e.g. production, staging)",
+      "default": "production"
+    },
+    "release": {
+      "type": "string",
+      "title": "Release",
+      "description": "Application release version attached to all Sentry events",
+      "default": "unknown"
+    },
+    "serverName": {
+      "type": "string",
+      "title": "Server Name",
+      "description": "Override the server name reported to Sentry (defaults to hostname)"
+    },
+    "tracesSampleRate": {
+      "type": "number",
+      "title": "Traces Sample Rate",
+      "description": "Fraction of HTTP requests to send as Sentry Performance transactions (0.0–1.0). Use 0.1 in production.",
+      "default": 1.0,
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "captureErrors": {
+      "type": "boolean",
+      "title": "Capture HTTP Errors",
+      "description": "Send HTTP 5xx responses as Sentry error events (in addition to transactions)",
+      "default": true
+    },
+    "reportHealthChecks": {
+      "type": "boolean",
+      "title": "Report Health Checks",
+      "description": "Send endpoint health-check failures as Sentry issues",
+      "default": true
+    },
+    "reportLogs": {
+      "type": "boolean",
+      "title": "Report Full Logs",
+      "description": "Attach request/response body logs as Sentry breadcrumbs. May generate high volume.",
+      "default": false
+    },
+    "reportMessageMetrics": {
+      "type": "boolean",
+      "title": "Report Message Metrics",
+      "description": "Report async message metrics from Event-native APIs as Sentry transactions",
+      "default": true
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug",
+      "description": "Enable Sentry SDK debug logging (verbose, for troubleshooting only)",
+      "default": false
+    }
+  },
+  "required": ["dsn"]
+}

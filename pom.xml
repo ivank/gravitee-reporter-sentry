@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright © 2015 The Gravitee team (http://gravitee.io)
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.gravitee</groupId>
+        <artifactId>gravitee-parent</artifactId>
+        <version>22.6.0</version>
+    </parent>
+
+    <groupId>io.gravitee.reporter</groupId>
+    <artifactId>gravitee-reporter-sentry</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>Gravitee.io APIM - Reporter - Sentry</name>
+    <description>Reports API gateway metrics, logs and errors to Sentry.io</description>
+
+    <properties>
+        <!-- Gravitee APIM 4.9 BOM -->
+        <gravitee-apim.version>4.9.0</gravitee-apim.version>
+        <!--
+          Override: the 4.9.0 BOM resolves gravitee-reporter-api to 1.35.1 (legacy v3 API).
+          2.1.0 introduces io.gravitee.reporter.api.v4.* types used by APIM 4.x at runtime.
+          Version pinned via explicit dependencyManagement entry below (BOM import scope does
+          not honour child-project property overrides).
+        -->
+        <!-- Sentry Java SDK — latest stable Feb 2026 -->
+        <sentry.version>8.3.0</sentry.version>
+        <!-- Java version — APIM 4.x requires JDK 17 -->
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Publish folder used by gravitee-parent release plugin -->
+        <publish-folder-path>graviteeio-apim/plugins/reporters</publish-folder-path>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.gravitee.apim</groupId>
+                <artifactId>gravitee-apim-bom</artifactId>
+                <version>${gravitee-apim.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!--
+              Explicit override: BOM resolves gravitee-reporter-api to 1.35.1 (legacy v3 API).
+              2.1.0 adds io.gravitee.reporter.api.v4.* types required at compile time.
+              Maven BOM import scope does NOT inherit child-project properties, so we must
+              override with an explicit dependencyManagement entry.
+            -->
+            <dependency>
+                <groupId>io.gravitee.reporter</groupId>
+                <artifactId>gravitee-reporter-api</artifactId>
+                <version>2.1.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- =========================================================
+             PROVIDED — supplied by the Gravitee gateway runtime
+             ========================================================= -->
+
+        <!-- Reporter API: Reporter interface, Reportable types, v4 metrics/log/health -->
+        <dependency>
+            <groupId>io.gravitee.reporter</groupId>
+            <artifactId>gravitee-reporter-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Common utilities: AbstractService, lifecycle -->
+        <dependency>
+            <groupId>io.gravitee.common</groupId>
+            <artifactId>gravitee-common</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Node API: access to gateway node metadata -->
+        <dependency>
+            <groupId>io.gravitee.node</groupId>
+            <artifactId>gravitee-node-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring context: @Configuration, @Bean, @Value -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring beans: needed for @Value injection -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-beans</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- SLF4J: logging facade available from gateway runtime -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Lombok: reduces boilerplate on config/value classes -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- =========================================================
+             BUNDLED — shipped inside the plugin ZIP under lib/
+             ========================================================= -->
+
+        <!-- Sentry Java SDK: core, no framework integration needed -->
+        <dependency>
+            <groupId>io.sentry</groupId>
+            <artifactId>sentry</artifactId>
+            <version>${sentry.version}</version>
+        </dependency>
+
+        <!-- =========================================================
+             TEST
+             ========================================================= -->
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Mockito 5.x required for MockedStatic support without inline dependency -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.14.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- mockito-inline bundled into mockito-core in Mockito 5; retained for clarity -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>5.14.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Logback for test logging output -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <resources>
+            <!-- Filter plugin.properties so ${project.name} etc. are resolved -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
+        <plugins>
+            <!-- Compiler: Java 17 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire: JUnit 5 runner -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                    <!--
+                      ByteBuddy (bundled in Mockito) declares support up to the previous Java GA
+                      release. Set experimental flag to allow it to run on newer JDK versions.
+                      Also open internal packages so ByteBuddy can instrument classes.
+                    -->
+                    <argLine>
+                        -Dnet.bytebuddy.experimental=true
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                    </argLine>
+                </configuration>
+            </plugin>
+
+            <!-- Copy runtime (non-provided) deps to target/dependencies/ for the ZIP -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/dependencies</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeScope>provided</excludeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Assembly: produce the Gravitee plugin ZIP -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <descriptors>
+                        <descriptor>src/main/resources/assembly/plugin-assembly.xml</descriptor>
+                    </descriptors>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-plugin-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
