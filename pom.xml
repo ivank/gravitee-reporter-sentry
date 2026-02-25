@@ -322,12 +322,51 @@
         <profile>
             <!--
               Activate with: mvn clean verify -Pintegration-test
-              Requires: Docker running, .env sourced, target/*.zip present (built by package phase).
+              Requires: Docker running, target/*.zip present (built by package phase).
               Failsafe runs after the package phase so the plugin ZIP is always available.
+
+              Credentials (local): copy local.properties.template to local.properties and fill
+              in values. Maven loads the file automatically via properties-maven-plugin.
+
+              Credentials (CI/CD): set SENTRY_DSN, SENTRY_TEST_TOKEN, SENTRY_TEST_ORG, and
+              SENTRY_TEST_PROJECT as environment variables. Env vars always take precedence over
+              local.properties because the test checks System.getenv() before System.getProperty().
             -->
             <id>integration-test</id>
+            <properties>
+                <!-- Default empty values — overridden by local.properties when the file exists. -->
+                <SENTRY_DSN>${env.SENTRY_DSN}</SENTRY_DSN>
+                <SENTRY_TEST_TOKEN>${env.SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
+                <SENTRY_TEST_ORG>${env.SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
+                <SENTRY_TEST_PROJECT>${env.SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
+            </properties>
             <build>
                 <plugins>
+                    <!--
+                      Load local.properties into Maven project properties so the values can be
+                      forwarded to the test JVM as system properties via failsafe below.
+                      quiet=true silently skips when the file is absent (CI/CD).
+                    -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>properties-maven-plugin</artifactId>
+                        <version>1.2.1</version>
+                        <executions>
+                            <execution>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>read-project-properties</goal>
+                                </goals>
+                                <configuration>
+                                    <files>
+                                        <file>${project.basedir}/local.properties</file>
+                                    </files>
+                                    <quiet>true</quiet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
@@ -345,22 +384,18 @@
                                 <include>**/*IT.java</include>
                             </includes>
                             <!--
-                              Inject project.version so the test can resolve the plugin ZIP
-                              path without hardcoding the version string.
+                              Pass credentials as JVM system properties.
+                              Values come from local.properties (local dev) or stay empty when
+                              the file is absent. The test checks System.getenv() first, so
+                              environment variables set by CI/CD always take precedence.
                             -->
                             <systemPropertyVariables>
                                 <project.version>${project.version}</project.version>
+                                <SENTRY_DSN>${SENTRY_DSN}</SENTRY_DSN>
+                                <SENTRY_TEST_TOKEN>${SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
+                                <SENTRY_TEST_ORG>${SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
+                                <SENTRY_TEST_PROJECT>${SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
                             </systemPropertyVariables>
-                            <!--
-                              Forward Sentry credentials from the shell environment
-                              (source .env before invoking Maven).
-                            -->
-                            <environmentVariables>
-                                <SENTRY_DSN>${env.SENTRY_DSN}</SENTRY_DSN>
-                                <SENTRY_TEST_TOKEN>${env.SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
-                                <SENTRY_TEST_ORG>${env.SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
-                                <SENTRY_TEST_PROJECT>${env.SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
-                            </environmentVariables>
                             <argLine>-Dnet.bytebuddy.experimental=true</argLine>
                         </configuration>
                     </plugin>

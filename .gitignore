@@ -20,3 +20,4 @@ target/
 
 # Secrets — never commit
 .env
+local.properties

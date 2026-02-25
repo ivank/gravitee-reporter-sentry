@@ -76,6 +76,14 @@ Transactions produced by this reporter follow
 Numeric IDs and UUIDs in paths are replaced with `{id}` to reduce cardinality
 (e.g. `/users/123/orders` → `/users/{id}/orders`).
 
+## Linting
+
+using maven prettier plugin
+
+```bash
+mvn prettier:write license:format
+```
+
 ## Building
 
 ```bash

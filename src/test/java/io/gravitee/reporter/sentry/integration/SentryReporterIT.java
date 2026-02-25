@@ -66,10 +66,18 @@ import org.testcontainers.utility.MountableFile;
  * query tag {@code gravitee.api_id}. This makes every assertion idempotent — re-runs create
  * new APIs with new UUIDs, so events from previous runs never interfere.
  *
- * <p><b>Prerequisites:</b> Docker running, {@code .env} sourced, plugin ZIP present in
- * {@code target/} (built by the {@code package} phase, which precedes {@code integration-test}).
+ * <p><b>Prerequisites:</b> Docker running, plugin ZIP present in {@code target/} (built by the
+ * {@code package} phase, which precedes {@code integration-test}).
  *
- * <p>Run with: {@code export $(grep -v '^#' .env | xargs) && mvn clean verify -Pintegration-test}
+ * <p><b>Configuration (local):</b> Copy {@code local.properties.template} to
+ * {@code local.properties} and fill in your Sentry credentials. Maven loads it automatically
+ * via {@code properties-maven-plugin} — no need to export env variables manually.
+ *
+ * <p><b>Configuration (CI/CD):</b> Set {@code SENTRY_DSN}, {@code SENTRY_TEST_TOKEN},
+ * {@code SENTRY_TEST_ORG}, and {@code SENTRY_TEST_PROJECT} as environment variables.
+ * Environment variables always take precedence over {@code local.properties}.
+ *
+ * <p>Run with: {@code mvn clean verify -Pintegration-test}
  */
 @Tag("integration")
 class SentryReporterIT {
@@ -101,10 +109,10 @@ class SentryReporterIT {
 
   @BeforeAll
   static void startInfrastructure() throws Exception {
-    String sentryDsn = requireEnv("SENTRY_DSN");
-    String sentryToken = requireEnv("SENTRY_TEST_TOKEN");
-    String sentryOrg = requireEnv("SENTRY_TEST_ORG");
-    String sentryProject = requireEnv("SENTRY_TEST_PROJECT");
+    String sentryDsn = System.getProperty("SENTRY_DSN");
+    String sentryToken = System.getProperty("SENTRY_TEST_TOKEN");
+    String sentryOrg = System.getProperty("SENTRY_TEST_ORG");
+    String sentryProject = System.getProperty("SENTRY_TEST_PROJECT");
     String pluginVersion = System.getProperty("project.version", "1.0.0-SNAPSHOT");
 
     // Fail fast: the plugin ZIP must be present before any container starts.
@@ -291,13 +299,5 @@ class SentryReporterIT {
 
     assertThat(issues).isNotEmpty();
     assertThat(issues.get(0).path("level").asText()).isEqualTo("error");
-  }
-
-  // ---- Private helpers ----------------------------------------------------------------
-
-  private static String requireEnv(String name) {
-    String value = System.getenv(name);
-    assertThat(value).as("Environment variable '%s' must be set — source .env before running Maven", name).isNotBlank();
-    return value;
   }
 }
