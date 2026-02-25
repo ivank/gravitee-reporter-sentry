@@ -32,6 +32,7 @@ import io.sentry.Sentry;
 import io.sentry.SentryLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Gravitee APIM Reporter plugin that forwards gateway telemetry to Sentry.io.
@@ -54,6 +55,7 @@ public class SentryReporter extends AbstractService<Reporter> implements Reporte
   private final LogToSentryMapper logMapper;
   private final MessageMetricsMapper messageMetricsMapper;
 
+  @Autowired
   public SentryReporter(SentryReporterConfiguration configuration) {
     this.configuration = configuration;
     this.metricsMapper = new MetricsToSentryMapper(configuration);

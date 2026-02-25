@@ -133,7 +133,7 @@ class SentryReporterIT {
       .withEnv("gravitee_services_core_http_host", "0.0.0.0")
       .withEnv("gravitee_services_core_http_authentication_type", "none")
       .dependsOn(mongodb)
-      // .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.management-api")))
+      .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.management-api")))
       .waitingFor(Wait.forHttp("/_node/health").forPort(18083).forStatusCode(200));
 
     // 3. go-httpbin mock backend — actively maintained, same API as httpbin.
@@ -141,18 +141,16 @@ class SentryReporterIT {
       .withNetwork(NETWORK)
       .withNetworkAliases("httpbin")
       .withExposedPorts(8080)
-      // .withLogConsumer(
-      //   new Slf4jLogConsumer(LoggerFactory.getLogger("tc.httpbin"))
-      // )
+      .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.httpbin")))
       .waitingFor(Wait.forHttp("/get").forPort(8080).forStatusCode(200));
 
     // 4. Gravitee Gateway with the sentry reporter plugin.
-    //    The gateway reads API definitions from MongoDB (same as docker-compose.yaml) —
-    //    no HTTP management-API sync needed.
     //    The plugin ZIP is mounted into the second plugins-ext directory.
     //    The node management API on port 18082 provides the health-check endpoint.
     gateway = new GenericContainer<>("graviteeio/apim-gateway:4.9.13")
+      .withCreateContainerCmdModifier(cmd -> cmd.withUser("root"))
       .withNetwork(NETWORK)
+      .withAccessToHost(true)
       .withNetworkAliases("gateway")
       .withExposedPorts(8082, 18082)
       .withCopyFileToContainer(

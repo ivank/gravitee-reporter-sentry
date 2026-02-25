@@ -75,7 +75,6 @@ public class MessageMetricsMapper {
 
       setTagIfNotNull(tx, "gravitee.api_id", metrics.getApiId());
       setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
-      setTagIfNotNull(tx, "gravitee.environment_id", metrics.getEnvironmentId());
 
       tx.setMeasurement("gateway_latency", metrics.getGatewayLatencyMs(), MeasurementUnit.Duration.MILLISECOND);
       // Count metrics have no unit — use the 2-arg overload

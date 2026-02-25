@@ -93,7 +93,6 @@ public class MetricsToSentryMapper {
       setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
       setTagIfNotNull(tx, "gravitee.plan_id", metrics.getPlanId());
       setTagIfNotNull(tx, "gravitee.application_id", metrics.getApplicationId());
-      setTagIfNotNull(tx, "gravitee.environment_id", metrics.getEnvironmentId());
       setTagIfNotNull(tx, "gravitee.subscription_id", metrics.getSubscriptionId());
       setTagIfNotNull(
         tx,

@@ -7,7 +7,7 @@
   </appender>
 
   <!-- Container stdout/stderr forwarded via Slf4jLogConsumer — keep at INFO -->
-  <logger name="tc" level="INFO"/>
+  <logger name="tc" level="ERROR"/>
 
   <!-- Testcontainers internals — suppress wire noise -->
   <logger name="org.testcontainers" level="ERROR"/>
