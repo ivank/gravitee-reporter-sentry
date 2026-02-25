@@ -39,9 +39,7 @@ import org.slf4j.LoggerFactory;
  */
 public class EndpointStatusMapper {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(
-    EndpointStatusMapper.class
-  );
+  private static final Logger LOGGER = LoggerFactory.getLogger(EndpointStatusMapper.class);
 
   /**
    * Maps a single {@link EndpointStatus} to a Sentry event.
@@ -97,11 +95,7 @@ public class EndpointStatusMapper {
     return msg;
   }
 
-  private static void setTagIfNotNull(
-    SentryEvent event,
-    String key,
-    String value
-  ) {
+  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
     if (value != null) {
       event.setTag(key, value);
     }

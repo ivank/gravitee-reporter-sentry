@@ -68,13 +68,7 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(() ->
-        Sentry.startTransaction(
-          eq("GET /api/v1/users"),
-          eq("http.server"),
-          any()
-        )
-      );
+      sentryMock.verify(() -> Sentry.startTransaction(eq("GET /api/v1/users"), eq("http.server"), any()));
       verify(mockTx).setStatus(SpanStatus.OK);
       verify(mockTx).finish(any(), any());
     }
@@ -98,11 +92,7 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      verify(mockTx).setMeasurement(
-        eq("gateway_response_time"),
-        eq(100L),
-        any()
-      );
+      verify(mockTx).setMeasurement(eq("gateway_response_time"), eq(100L), any());
       verify(mockTx).setMeasurement(eq("response_size"), eq(512L), any());
     }
   }
@@ -113,34 +103,20 @@ class MetricsToSentryMapperTest {
       when(config.isCaptureErrors()).thenReturn(true);
       mockTransaction(sentryMock, SpanStatus.OK);
 
-      Metrics metrics = Metrics.builder()
-        .httpMethod(HttpMethod.GET)
-        .uri("/api/v1/ok")
-        .status(200)
-        .build();
+      Metrics metrics = Metrics.builder().httpMethod(HttpMethod.GET).uri("/api/v1/ok").status(200).build();
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
     }
   }
 
   @Test
   void map_http500_setsInternalErrorStatus() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      ITransaction mockTx = mockTransaction(
-        sentryMock,
-        SpanStatus.INTERNAL_ERROR
-      );
+      ITransaction mockTx = mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
 
-      Metrics metrics = Metrics.builder()
-        .httpMethod(HttpMethod.POST)
-        .uri("/api/v1/orders")
-        .status(500)
-        .build();
+      Metrics metrics = Metrics.builder().httpMethod(HttpMethod.POST).uri("/api/v1/orders").status(500).build();
 
       mapper.map(metrics, scope);
 
@@ -163,10 +139,7 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        times(1)
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), times(1));
     }
   }
 
@@ -176,18 +149,11 @@ class MetricsToSentryMapperTest {
       when(config.isCaptureErrors()).thenReturn(false);
       mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
 
-      Metrics metrics = Metrics.builder()
-        .httpMethod(HttpMethod.POST)
-        .uri("/api/v1/orders")
-        .status(500)
-        .build();
+      Metrics metrics = Metrics.builder().httpMethod(HttpMethod.POST).uri("/api/v1/orders").status(500).build();
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
     }
   }
 
@@ -196,10 +162,7 @@ class MetricsToSentryMapperTest {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
       mockTransaction(sentryMock, SpanStatus.OK);
 
-      Metrics metrics = Metrics.builder()
-        .uri("/api/v1/test")
-        .status(200)
-        .build();
+      Metrics metrics = Metrics.builder().uri("/api/v1/test").status(200).build();
 
       // must not throw
       mapper.map(metrics, scope);
@@ -220,13 +183,7 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(() ->
-        Sentry.startTransaction(
-          eq("DELETE /fallback/path"),
-          eq("http.server"),
-          any()
-        )
-      );
+      sentryMock.verify(() -> Sentry.startTransaction(eq("DELETE /fallback/path"), eq("http.server"), any()));
     }
   }
 
@@ -235,9 +192,7 @@ class MetricsToSentryMapperTest {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
       ITransaction mockTx = mockTransaction(sentryMock, SpanStatus.OK);
       // Simulate an exception during tag-setting
-      doThrow(new RuntimeException("tag error"))
-        .when(mockTx)
-        .setTag(anyString(), anyString());
+      doThrow(new RuntimeException("tag error")).when(mockTx).setTag(anyString(), anyString());
 
       Metrics metrics = Metrics.builder()
         .httpMethod(HttpMethod.GET)
@@ -257,25 +212,19 @@ class MetricsToSentryMapperTest {
 
   @Test
   void sanitizePath_numericSegment_replacedWithPlaceholder() {
-    assertThat(
-      MetricsToSentryMapper.sanitizePath("/users/123/orders")
-    ).isEqualTo("/users/{id}/orders");
+    assertThat(MetricsToSentryMapper.sanitizePath("/users/123/orders")).isEqualTo("/users/{id}/orders");
   }
 
   @Test
   void sanitizePath_uuid_replacedWithPlaceholder() {
-    assertThat(
-      MetricsToSentryMapper.sanitizePath(
-        "/apis/550e8400-e29b-41d4-a716-446655440000/keys"
-      )
-    ).isEqualTo("/apis/{id}/keys");
+    assertThat(MetricsToSentryMapper.sanitizePath("/apis/550e8400-e29b-41d4-a716-446655440000/keys")).isEqualTo(
+      "/apis/{id}/keys"
+    );
   }
 
   @Test
   void sanitizePath_noIds_unchanged() {
-    assertThat(MetricsToSentryMapper.sanitizePath("/api/v1/users")).isEqualTo(
-      "/api/v1/users"
-    );
+    assertThat(MetricsToSentryMapper.sanitizePath("/api/v1/users")).isEqualTo("/api/v1/users");
   }
 
   @Test
@@ -284,15 +233,10 @@ class MetricsToSentryMapperTest {
   }
 
   // Helper: sets up Sentry.startTransaction mock to return a transaction stub
-  private ITransaction mockTransaction(
-    MockedStatic<Sentry> sentryMock,
-    SpanStatus status
-  ) {
+  private ITransaction mockTransaction(MockedStatic<Sentry> sentryMock, SpanStatus status) {
     ITransaction mockTx = mock(ITransaction.class);
     when(mockTx.getStatus()).thenReturn(status);
-    sentryMock
-      .when(() -> Sentry.startTransaction(anyString(), anyString(), any()))
-      .thenReturn(mockTx);
+    sentryMock.when(() -> Sentry.startTransaction(anyString(), anyString(), any())).thenReturn(mockTx);
     return mockTx;
   }
 }

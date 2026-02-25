@@ -44,13 +44,9 @@ import org.slf4j.LoggerFactory;
  *   <li>{@link EndpointStatus} — Health-check results → Sentry error event on state change
  * </ul>
  */
-public class SentryReporter
-  extends AbstractService<Reporter>
-  implements Reporter {
+public class SentryReporter extends AbstractService<Reporter> implements Reporter {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(
-    SentryReporter.class
-  );
+  private static final Logger LOGGER = LoggerFactory.getLogger(SentryReporter.class);
 
   private final SentryReporterConfiguration configuration;
   private final MetricsToSentryMapper metricsMapper;
@@ -77,9 +73,7 @@ public class SentryReporter
 
     String dsn = configuration.getDsn();
     if (dsn == null || dsn.isBlank()) {
-      LOGGER.warn(
-        "Sentry DSN is not configured. Reporter will start but send nothing."
-      );
+      LOGGER.warn("Sentry DSN is not configured. Reporter will start but send nothing.");
       return;
     }
 
@@ -89,19 +83,14 @@ public class SentryReporter
       options.setRelease(configuration.getRelease());
       options.setTracesSampleRate(configuration.getTracesSampleRate());
       options.setDebug(configuration.isDebug());
-      if (
-        configuration.getServerName() != null &&
-        !configuration.getServerName().isBlank()
-      ) {
+      if (configuration.getServerName() != null && !configuration.getServerName().isBlank()) {
         options.setServerName(configuration.getServerName());
       }
       // Disable auto-session tracking — we are a server-side reporter, not a user-facing app
       options.setEnableAutoSessionTracking(false);
       // Required to flush events on shutdown in a VM that may exit without drain time
       options.setShutdownTimeoutMillis(2000);
-      options.setDiagnosticLevel(
-        configuration.isDebug() ? SentryLevel.DEBUG : SentryLevel.ERROR
-      );
+      options.setDiagnosticLevel(configuration.isDebug() ? SentryLevel.DEBUG : SentryLevel.ERROR);
     });
 
     LOGGER.info(
@@ -128,28 +117,18 @@ public class SentryReporter
    */
   @Override
   public void report(Reportable reportable) {
-    if (
-      lifecycleState() != Lifecycle.State.STARTED || !configuration.isEnabled()
-    ) {
+    if (lifecycleState() != Lifecycle.State.STARTED || !configuration.isEnabled()) {
       return;
     }
 
     try {
       if (reportable instanceof Metrics metrics) {
         Sentry.withScope(scope -> metricsMapper.map(metrics, scope));
-      } else if (
-        reportable instanceof Log log && configuration.isReportLogs()
-      ) {
+      } else if (reportable instanceof Log log && configuration.isReportLogs()) {
         logMapper.map(log);
-      } else if (
-        reportable instanceof MessageMetrics messageMetrics &&
-        configuration.isReportMessageMetrics()
-      ) {
+      } else if (reportable instanceof MessageMetrics messageMetrics && configuration.isReportMessageMetrics()) {
         messageMetricsMapper.map(messageMetrics);
-      } else if (
-        reportable instanceof EndpointStatus endpointStatus &&
-        configuration.isReportHealthChecks()
-      ) {
+      } else if (reportable instanceof EndpointStatus endpointStatus && configuration.isReportHealthChecks()) {
         endpointStatusMapper.map(endpointStatus);
       }
     } catch (Exception e) {
@@ -167,10 +146,8 @@ public class SentryReporter
       configuration.isEnabled() &&
       (reportable instanceof Metrics ||
         (reportable instanceof Log && configuration.isReportLogs()) ||
-        (reportable instanceof MessageMetrics &&
-          configuration.isReportMessageMetrics()) ||
-        (reportable instanceof EndpointStatus &&
-          configuration.isReportHealthChecks()))
+        (reportable instanceof MessageMetrics && configuration.isReportMessageMetrics()) ||
+        (reportable instanceof EndpointStatus && configuration.isReportHealthChecks()))
     );
   }
 }

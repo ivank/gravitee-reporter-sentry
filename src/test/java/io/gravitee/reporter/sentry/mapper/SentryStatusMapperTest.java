@@ -39,65 +39,47 @@ class SentryStatusMapperTest {
 
   @Test
   void http400_mapsToInvalidArgument() {
-    assertThat(SentryStatusMapper.fromHttpStatus(400)).isEqualTo(
-      SpanStatus.INVALID_ARGUMENT
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(400)).isEqualTo(SpanStatus.INVALID_ARGUMENT);
   }
 
   @Test
   void http401_mapsToUnauthenticated() {
-    assertThat(SentryStatusMapper.fromHttpStatus(401)).isEqualTo(
-      SpanStatus.UNAUTHENTICATED
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(401)).isEqualTo(SpanStatus.UNAUTHENTICATED);
   }
 
   @Test
   void http403_mapsToPermissionDenied() {
-    assertThat(SentryStatusMapper.fromHttpStatus(403)).isEqualTo(
-      SpanStatus.PERMISSION_DENIED
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(403)).isEqualTo(SpanStatus.PERMISSION_DENIED);
   }
 
   @Test
   void http404_mapsToNotFound() {
-    assertThat(SentryStatusMapper.fromHttpStatus(404)).isEqualTo(
-      SpanStatus.NOT_FOUND
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(404)).isEqualTo(SpanStatus.NOT_FOUND);
   }
 
   @Test
   void http409_mapsToAlreadyExists() {
-    assertThat(SentryStatusMapper.fromHttpStatus(409)).isEqualTo(
-      SpanStatus.ALREADY_EXISTS
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(409)).isEqualTo(SpanStatus.ALREADY_EXISTS);
   }
 
   @Test
   void http429_mapsToResourceExhausted() {
-    assertThat(SentryStatusMapper.fromHttpStatus(429)).isEqualTo(
-      SpanStatus.RESOURCE_EXHAUSTED
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(429)).isEqualTo(SpanStatus.RESOURCE_EXHAUSTED);
   }
 
   @Test
   void http500_mapsToInternalError() {
-    assertThat(SentryStatusMapper.fromHttpStatus(500)).isEqualTo(
-      SpanStatus.INTERNAL_ERROR
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(500)).isEqualTo(SpanStatus.INTERNAL_ERROR);
   }
 
   @Test
   void http503_mapsToInternalError() {
-    assertThat(SentryStatusMapper.fromHttpStatus(503)).isEqualTo(
-      SpanStatus.INTERNAL_ERROR
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(503)).isEqualTo(SpanStatus.INTERNAL_ERROR);
   }
 
   @Test
   void http418_mapsToUnknownError() {
     // 418 I'm a teapot — recognised 4xx but not specifically mapped
-    assertThat(SentryStatusMapper.fromHttpStatus(418)).isEqualTo(
-      SpanStatus.UNKNOWN_ERROR
-    );
+    assertThat(SentryStatusMapper.fromHttpStatus(418)).isEqualTo(SpanStatus.UNKNOWN_ERROR);
   }
 }

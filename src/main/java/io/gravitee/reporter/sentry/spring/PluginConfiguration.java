@@ -36,9 +36,7 @@ public class PluginConfiguration {
   }
 
   @Bean
-  public SentryReporter sentryReporter(
-    SentryReporterConfiguration configuration
-  ) {
+  public SentryReporter sentryReporter(SentryReporterConfiguration configuration) {
     return new SentryReporter(configuration);
   }
 }

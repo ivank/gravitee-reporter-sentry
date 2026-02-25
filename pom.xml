@@ -74,6 +74,14 @@
                 <artifactId>gravitee-reporter-api</artifactId>
                 <version>2.1.0</version>
             </dependency>
+            <!-- Testcontainers BOM: pins all org.testcontainers artifacts to one version -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.20.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -180,6 +188,43 @@
             <artifactId>logback-classic</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- =========================================================
+             INTEGRATION TEST — Testcontainers + helpers
+             ========================================================= -->
+
+        <!-- Testcontainers core: GenericContainer, Network, MountableFile, Startables -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 5 bridge: @Testcontainers + @Container lifecycle annotations -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- MongoDBContainer: purpose-built wait strategy for MongoDB -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Jackson: build Management API JSON bodies and parse Sentry API responses -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Awaitility: replaces Thread.sleep for all async waits in integration tests -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -215,6 +260,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <useModulePath>false</useModulePath>
+                    <!-- Exclude @Tag("integration") tests — those run via failsafe -Pintegration-test -->
+                    <excludedGroups>integration</excludedGroups>
                     <!--
                       ByteBuddy (bundled in Mockito) declares support up to the previous Java GA
                       release. Set experimental flag to allow it to run on newer JDK versions.
@@ -270,4 +317,56 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!--
+              Activate with: mvn clean verify -Pintegration-test
+              Requires: Docker running, .env sourced, target/*.zip present (built by package phase).
+              Failsafe runs after the package phase so the plugin ZIP is always available.
+            -->
+            <id>integration-test</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <!--
+                              Inject project.version so the test can resolve the plugin ZIP
+                              path without hardcoding the version string.
+                            -->
+                            <systemPropertyVariables>
+                                <project.version>${project.version}</project.version>
+                            </systemPropertyVariables>
+                            <!--
+                              Forward Sentry credentials from the shell environment
+                              (source .env before invoking Maven).
+                            -->
+                            <environmentVariables>
+                                <SENTRY_DSN>${env.SENTRY_DSN}</SENTRY_DSN>
+                                <SENTRY_TEST_TOKEN>${env.SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
+                                <SENTRY_TEST_ORG>${env.SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
+                                <SENTRY_TEST_PROJECT>${env.SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
+                            </environmentVariables>
+                            <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

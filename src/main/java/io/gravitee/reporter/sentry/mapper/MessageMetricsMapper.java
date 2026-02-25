@@ -37,9 +37,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MessageMetricsMapper {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(
-    MessageMetricsMapper.class
-  );
+  private static final Logger LOGGER = LoggerFactory.getLogger(MessageMetricsMapper.class);
 
   private final SentryReporterConfiguration configuration;
 
@@ -53,12 +51,8 @@ public class MessageMetricsMapper {
    * @param metrics the async-message metrics batch
    */
   public void map(MessageMetrics metrics) {
-    String operation = metrics.getOperation() != null
-      ? metrics.getOperation().name()
-      : "UNKNOWN";
-    String connectorId = metrics.getConnectorId() != null
-      ? metrics.getConnectorId()
-      : "unknown";
+    String operation = metrics.getOperation() != null ? metrics.getOperation().name() : "UNKNOWN";
+    String connectorId = metrics.getConnectorId() != null ? metrics.getConnectorId() : "unknown";
     String txName = operation + " " + connectorId;
 
     long startMs = metrics.getTimestamp();
@@ -67,16 +61,12 @@ public class MessageMetricsMapper {
 
     ITransaction tx = Sentry.startTransaction(txName, "message.broker", opts);
     try {
-      tx.setStatus(
-        metrics.isError() ? SpanStatus.INTERNAL_ERROR : SpanStatus.OK
-      );
+      tx.setStatus(metrics.isError() ? SpanStatus.INTERNAL_ERROR : SpanStatus.OK);
 
       tx.setData("message.operation", operation);
       tx.setData(
         "message.connector_type",
-        metrics.getConnectorType() != null
-          ? metrics.getConnectorType().name()
-          : null
+        metrics.getConnectorType() != null ? metrics.getConnectorType().name() : null
       );
       tx.setData("message.connector_id", connectorId);
       tx.setData("message.count", metrics.getCount());
@@ -85,17 +75,9 @@ public class MessageMetricsMapper {
 
       setTagIfNotNull(tx, "gravitee.api_id", metrics.getApiId());
       setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
-      setTagIfNotNull(
-        tx,
-        "gravitee.environment_id",
-        metrics.getEnvironmentId()
-      );
+      setTagIfNotNull(tx, "gravitee.environment_id", metrics.getEnvironmentId());
 
-      tx.setMeasurement(
-        "gateway_latency",
-        metrics.getGatewayLatencyMs(),
-        MeasurementUnit.Duration.MILLISECOND
-      );
+      tx.setMeasurement("gateway_latency", metrics.getGatewayLatencyMs(), MeasurementUnit.Duration.MILLISECOND);
       // Count metrics have no unit — use the 2-arg overload
       tx.setMeasurement("message_count", metrics.getCountIncrement());
       tx.setMeasurement("error_count", metrics.getErrorCountIncrement());
@@ -104,11 +86,7 @@ public class MessageMetricsMapper {
         captureErrorEvent(metrics, txName);
       }
     } catch (Exception e) {
-      LOGGER.warn(
-        "Failed to report message metrics to Sentry for '{}': {}",
-        txName,
-        e.getMessage()
-      );
+      LOGGER.warn("Failed to report message metrics to Sentry for '{}': {}", txName, e.getMessage());
     } finally {
       long endMs = startMs + metrics.getGatewayLatencyMs();
       tx.finish(tx.getStatus(), MetricsToSentryMapper.toSentryDate(endMs));
@@ -121,13 +99,7 @@ public class MessageMetricsMapper {
     event.setTransaction(txName);
 
     Message msg = new Message();
-    msg.setMessage(
-      "Message error on " +
-        txName +
-        " (errorCount=" +
-        metrics.getErrorCount() +
-        ")"
-    );
+    msg.setMessage("Message error on " + txName + " (errorCount=" + metrics.getErrorCount() + ")");
     event.setMessage(msg);
 
     setTagIfNotNull(event, "gravitee.api_id", metrics.getApiId());
@@ -136,21 +108,13 @@ public class MessageMetricsMapper {
     Sentry.captureEvent(event);
   }
 
-  private static void setTagIfNotNull(
-    ITransaction tx,
-    String key,
-    String value
-  ) {
+  private static void setTagIfNotNull(ITransaction tx, String key, String value) {
     if (value != null) {
       tx.setTag(key, value);
     }
   }
 
-  private static void setTagIfNotNull(
-    SentryEvent event,
-    String key,
-    String value
-  ) {
+  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
     if (value != null) {
       event.setTag(key, value);
     }

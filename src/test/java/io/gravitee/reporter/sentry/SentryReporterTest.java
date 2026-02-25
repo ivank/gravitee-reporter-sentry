@@ -154,10 +154,7 @@ class SentryReporterTest {
 
       reporter.report(log);
 
-      sentryMock.verify(
-        () -> Sentry.addBreadcrumb(any(io.sentry.Breadcrumb.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.addBreadcrumb(any(io.sentry.Breadcrumb.class)), never());
     }
   }
 }

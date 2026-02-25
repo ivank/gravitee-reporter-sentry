@@ -54,9 +54,7 @@ public final class SentryStatusMapper {
       case 404 -> SpanStatus.NOT_FOUND;
       case 409 -> SpanStatus.ALREADY_EXISTS;
       case 429 -> SpanStatus.RESOURCE_EXHAUSTED;
-      default -> httpStatus >= 500
-        ? SpanStatus.INTERNAL_ERROR
-        : SpanStatus.UNKNOWN_ERROR;
+      default -> httpStatus >= 500 ? SpanStatus.INTERNAL_ERROR : SpanStatus.UNKNOWN_ERROR;
     };
   }
 }
