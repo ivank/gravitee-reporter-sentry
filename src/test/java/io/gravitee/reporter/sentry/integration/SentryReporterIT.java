@@ -180,7 +180,7 @@ class SentryReporterIT {
       .withEnv("gravitee_reporters_sentry_enabled", "true")
       .withEnv("gravitee_reporters_sentry_dsn", sentryDsn)
       .withEnv("gravitee_reporters_sentry_environment", "integration-test")
-      .withEnv("gravitee_reporters_sentry_release", "1.0.0-SNAPSHOT")
+      .withEnv("gravitee_reporters_sentry_release", pluginVersion)
       .withEnv("gravitee_reporters_sentry_tracessamplerate", "1.0")
       .withEnv("gravitee_reporters_sentry_captureerrors", "true")
       .withEnv("gravitee_reporters_sentry_reporthealthchecks", "false")
