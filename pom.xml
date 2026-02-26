@@ -47,8 +47,8 @@
         -->
         <!-- Sentry Java SDK — latest stable Feb 2026 -->
         <sentry.version>8.3.0</sentry.version>
-        <!-- Java version — APIM 4.x requires JDK 17 -->
-        <maven.compiler.release>17</maven.compiler.release>
+        <!-- Java version — requires APIM ≥ 4.7 (first release to ship JDK 21 images) ⚠️ -->
+        <maven.compiler.release>21</maven.compiler.release>
         <!-- Publish folder used by gravitee-parent release plugin -->
         <publish-folder-path>graviteeio-apim/plugins/reporters</publish-folder-path>
     </properties>
@@ -128,13 +128,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Lombok: reduces boilerplate on config/value classes -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
 
@@ -224,6 +217,19 @@
             <version>4.2.2</version>
             <scope>test</scope>
         </dependency>
+        <!-- Retrofit 2: type-safe HTTP client used in integration test helpers -->
+        <dependency>
+            <groupId>com.squareup.retrofit2</groupId>
+            <artifactId>retrofit</artifactId>
+            <version>2.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.retrofit2</groupId>
+            <artifactId>converter-jackson</artifactId>
+            <version>2.11.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -236,19 +242,12 @@
         </resources>
 
         <plugins>
-            <!-- Compiler: Java 17 -->
+            <!-- Compiler: Java 21 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <release>17</release>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
+                    <release>21</release>
                 </configuration>
             </plugin>
 

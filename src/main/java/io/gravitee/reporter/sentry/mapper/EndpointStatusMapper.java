@@ -65,9 +65,9 @@ public class EndpointStatusMapper {
         event.setMessage(buildMessage("Endpoint recovered", status));
       }
 
-      setTagIfNotNull(event, "gravitee.api_id", status.getApi());
-      setTagIfNotNull(event, "gravitee.api_name", status.getApiName());
-      setTagIfNotNull(event, "gravitee.endpoint", status.getEndpoint());
+      SentryTags.ifPresent(status.getApi(), v -> event.setTag("gravitee.api_id", v));
+      SentryTags.ifPresent(status.getApiName(), v -> event.setTag("gravitee.api_name", v));
+      SentryTags.ifPresent(status.getEndpoint(), v -> event.setTag("gravitee.endpoint", v));
       event.setTag("gravitee.available", String.valueOf(status.isAvailable()));
 
       Sentry.captureEvent(event);
@@ -83,21 +83,13 @@ public class EndpointStatusMapper {
   private static Message buildMessage(String prefix, EndpointStatus status) {
     Message msg = new Message();
     msg.setMessage(
-      prefix +
-        ": " +
-        status.getEndpoint() +
-        " (api=" +
-        status.getApi() +
-        ", responseTime=" +
-        status.getResponseTime() +
-        "ms)"
+      "%s: %s (api=%s, responseTime=%dms)".formatted(
+        prefix,
+        status.getEndpoint(),
+        status.getApi(),
+        status.getResponseTime()
+      )
     );
     return msg;
-  }
-
-  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
-    if (value != null) {
-      event.setTag(key, value);
-    }
   }
 }

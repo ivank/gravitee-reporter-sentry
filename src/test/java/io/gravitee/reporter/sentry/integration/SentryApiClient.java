@@ -18,28 +18,24 @@ package io.gravitee.reporter.sentry.integration;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.StreamSupport;
+import okhttp3.OkHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.jackson.JacksonConverterFactory;
 
 /**
  * Thin client for the Sentry REST API used to verify that the reporter sent the expected
  * events during integration tests.
  *
  * <p><b>Region:</b> The DSN targets Sentry's EU (DE) region; the API base is
- * {@code https://de.sentry.io/api/0}, not {@code https://sentry.io/api/0}.
+ * {@code https://de.sentry.io/api/0/}, not {@code https://sentry.io/api/0/}.
  *
- * <p><b>Org and project slugs</b> are supplied directly via {@code SENTRY_TEST_ORG} and
- * {@code SENTRY_TEST_PROJECT} environment variables (set in {@code .env}).
+ * <p><b>Org slug</b> is supplied via the {@code SENTRY_TEST_ORG} environment variable.
  *
  * <p><b>Polling:</b> both {@link #pollForTransactions} and {@link #pollForIssues} use
  * Awaitility internally. On timeout, Awaitility throws {@code ConditionTimeoutException}
@@ -48,19 +44,24 @@ import org.slf4j.LoggerFactory;
 class SentryApiClient {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SentryApiClient.class);
-  private static final String API_BASE = "https://de.sentry.io/api/0";
+  private static final String API_BASE = "https://de.sentry.io/api/0/";
 
-  private final HttpClient http = HttpClient.newHttpClient();
-  private final ObjectMapper mapper;
-  private final String token;
+  private final SentryOrganizationApi api;
   private final String orgSlug;
-  private final String projectSlug;
 
-  SentryApiClient(String token, String orgSlug, String projectSlug, ObjectMapper mapper) {
-    this.token = token;
+  SentryApiClient(String token, String orgSlug, String projectSlug) {
+    OkHttpClient okHttp = new OkHttpClient.Builder()
+      .addInterceptor(chain ->
+        chain.proceed(chain.request().newBuilder().header("Authorization", "Bearer " + token).build())
+      )
+      .build();
+    this.api = new Retrofit.Builder()
+      .baseUrl(API_BASE)
+      .client(okHttp)
+      .addConverterFactory(JacksonConverterFactory.create())
+      .build()
+      .create(SentryOrganizationApi.class);
     this.orgSlug = orgSlug;
-    this.projectSlug = projectSlug;
-    this.mapper = mapper;
     LOGGER.info("Sentry client ready — org={} project={}", orgSlug, projectSlug);
   }
 
@@ -68,12 +69,9 @@ class SentryApiClient {
    * Polls the Sentry Discover (transactions) API until at least one transaction matching
    * {@code query} is found, or {@code timeout} elapses.
    *
-   * <p>Uses {@code GET /api/0/organizations/{org}/events/?dataset=transactions}.
-   *
    * @param query   Sentry search query, e.g. {@code transaction:"GET /sentry-it-ok"}
    * @param timeout maximum time to wait
-   * @return list of matching event nodes from the {@code data} array (never empty — method
-   *         throws {@code ConditionTimeoutException} if no events arrive in time)
+   * @return list of matching event nodes from the {@code data} array (never empty)
    */
   List<JsonNode> pollForTransactions(String query, Duration timeout) {
     LOGGER.info("Polling Sentry transactions: {}", query);
@@ -99,11 +97,9 @@ class SentryApiClient {
    * Polls the Sentry Issues API until at least one issue matching {@code query} is found,
    * or {@code timeout} elapses.
    *
-   * <p>Uses {@code GET /api/0/organizations/{org}/issues/}.
-   *
    * @param query   Sentry search query, e.g. {@code is:unresolved gravitee.api_id:<uuid>}
    * @param timeout maximum time to wait
-   * @return list of matching issue nodes (never empty — throws on timeout)
+   * @return list of matching issue nodes (never empty)
    */
   List<JsonNode> pollForIssues(String query, Duration timeout) {
     LOGGER.info("Polling Sentry issues: {}", query);
@@ -128,55 +124,22 @@ class SentryApiClient {
   // ---- Private helpers ----------------------------------------------------------------
 
   private List<JsonNode> fetchTransactions(String query) throws Exception {
-    String url =
-      API_BASE +
-      "/organizations/" +
-      orgSlug +
-      "/events/" +
-      "?dataset=transactions" +
-      "&query=" +
-      URLEncoder.encode(query, StandardCharsets.UTF_8) +
-      "&field=id&field=transaction&per_page=5";
-
-    HttpResponse<String> resp = http.send(bearerRequest(url).build(), HttpResponse.BodyHandlers.ofString());
-    if (resp.statusCode() != 200) {
-      LOGGER.warn("Sentry events API returned {}: {}", resp.statusCode(), resp.body());
+    Response<JsonNode> resp = api.getEvents(orgSlug, "transactions", query, List.of("id", "transaction"), 5).execute();
+    if (!resp.isSuccessful()) {
+      LOGGER.warn("Sentry events API returned {}", resp.code());
       return List.of();
     }
-    JsonNode data = mapper.readTree(resp.body()).path("data");
-    if (!data.isArray()) {
-      return List.of();
-    }
-    List<JsonNode> items = new ArrayList<>();
-    data.forEach(items::add);
-    return items;
+    JsonNode data = resp.body().path("data");
+    return data.isArray() ? StreamSupport.stream(data.spliterator(), false).toList() : List.of();
   }
 
   private List<JsonNode> fetchIssues(String query) throws Exception {
-    String url =
-      API_BASE +
-      "/organizations/" +
-      orgSlug +
-      "/issues/" +
-      "?query=" +
-      URLEncoder.encode(query, StandardCharsets.UTF_8) +
-      "&per_page=5";
-
-    HttpResponse<String> resp = http.send(bearerRequest(url).build(), HttpResponse.BodyHandlers.ofString());
-    if (resp.statusCode() != 200) {
-      LOGGER.warn("Sentry issues API returned {}: {}", resp.statusCode(), resp.body());
+    Response<JsonNode> resp = api.getIssues(orgSlug, query, 5).execute();
+    if (!resp.isSuccessful()) {
+      LOGGER.warn("Sentry issues API returned {}", resp.code());
       return List.of();
     }
-    JsonNode root = mapper.readTree(resp.body());
-    if (!root.isArray()) {
-      return List.of();
-    }
-    List<JsonNode> items = new ArrayList<>();
-    root.forEach(items::add);
-    return items;
-  }
-
-  private HttpRequest.Builder bearerRequest(String url) {
-    return HttpRequest.newBuilder().uri(URI.create(url)).header("Authorization", "Bearer " + token);
+    JsonNode root = resp.body();
+    return root.isArray() ? StreamSupport.stream(root.spliterator(), false).toList() : List.of();
   }
 }

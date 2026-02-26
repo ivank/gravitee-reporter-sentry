@@ -25,8 +25,12 @@ import io.gravitee.reporter.api.common.Response;
 import io.gravitee.reporter.api.v4.log.Log;
 import io.sentry.Breadcrumb;
 import io.sentry.Sentry;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
@@ -139,23 +143,18 @@ class LogToSentryMapperTest {
 
   // --- truncate tests ---
 
-  @Test
-  void truncate_shortString_unchanged() {
-    assertThat(LogToSentryMapper.truncate("hello", 10)).isEqualTo("hello");
+  @ParameterizedTest(name = "truncate({0}, {1}) = {2}")
+  @MethodSource("truncateCases")
+  void truncate(String input, int max, String expected) {
+    assertThat(LogToSentryMapper.truncate(input, max)).isEqualTo(expected);
   }
 
-  @Test
-  void truncate_exactLength_unchanged() {
-    assertThat(LogToSentryMapper.truncate("hello", 5)).isEqualTo("hello");
-  }
-
-  @Test
-  void truncate_longString_appendsEllipsis() {
-    assertThat(LogToSentryMapper.truncate("hello world", 5)).isEqualTo("hello…");
-  }
-
-  @Test
-  void truncate_null_returnsNull() {
-    assertThat(LogToSentryMapper.truncate(null, 10)).isNull();
+  static Stream<Arguments> truncateCases() {
+    return Stream.of(
+      Arguments.of("hello", 10, "hello"),
+      Arguments.of("hello", 5, "hello"),
+      Arguments.of("hello world", 5, "hello…"),
+      Arguments.of(null, 10, null)
+    );
   }
 }

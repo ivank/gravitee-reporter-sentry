@@ -15,6 +15,7 @@
  */
 package io.gravitee.reporter.sentry.mapper;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -68,8 +69,7 @@ class EndpointStatusMapperTest {
       ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
-      SentryEvent event = captor.getValue();
-      assert event.getLevel() == SentryLevel.ERROR;
+      assertThat(captor.getValue().getLevel()).isEqualTo(SentryLevel.ERROR);
     }
   }
 
@@ -83,8 +83,7 @@ class EndpointStatusMapperTest {
       ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
-      SentryEvent event = captor.getValue();
-      assert event.getLevel() == SentryLevel.INFO;
+      assertThat(captor.getValue().getLevel()).isEqualTo(SentryLevel.INFO);
     }
   }
 
@@ -105,10 +104,10 @@ class EndpointStatusMapperTest {
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
       SentryEvent event = captor.getValue();
-      assert "api-123".equals(event.getTag("gravitee.api_id"));
-      assert "My API".equals(event.getTag("gravitee.api_name"));
-      assert "https://backend/health".equals(event.getTag("gravitee.endpoint"));
-      assert "false".equals(event.getTag("gravitee.available"));
+      assertThat(event.getTag("gravitee.api_id")).isEqualTo("api-123");
+      assertThat(event.getTag("gravitee.api_name")).isEqualTo("My API");
+      assertThat(event.getTag("gravitee.endpoint")).isEqualTo("https://backend/health");
+      assertThat(event.getTag("gravitee.available")).isEqualTo("false");
     }
   }
 

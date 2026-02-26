@@ -16,17 +16,17 @@
 package io.gravitee.reporter.sentry.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Base64;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.jackson.JacksonConverterFactory;
 
 /**
  * Drives the Gravitee APIM Management REST API to create and fully deploy a V4 HTTP proxy
@@ -48,17 +48,22 @@ class ManagementApiHelper {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ManagementApiHelper.class);
 
-  private static final String ORG_ENV = "/management/v2/organizations/DEFAULT/environments/DEFAULT";
+  private static final String ORG_ENV = "management/v2/organizations/DEFAULT/environments/DEFAULT/";
 
-  private final HttpClient http = HttpClient.newHttpClient();
-  private final ObjectMapper mapper;
-  private final String baseUrl;
-  private final String authHeader;
+  private final GraviteeManagementApi api;
 
-  ManagementApiHelper(String baseUrl, ObjectMapper mapper) {
-    this.baseUrl = baseUrl;
-    this.mapper = mapper;
-    this.authHeader = "Basic " + Base64.getEncoder().encodeToString("admin:admin".getBytes(StandardCharsets.UTF_8));
+  ManagementApiHelper(String baseUrl) {
+    OkHttpClient okHttp = new OkHttpClient.Builder()
+      .addInterceptor(chain ->
+        chain.proceed(chain.request().newBuilder().header("Authorization", basicAuth("admin", "admin")).build())
+      )
+      .build();
+    this.api = new Retrofit.Builder()
+      .baseUrl(baseUrl + "/" + ORG_ENV)
+      .client(okHttp)
+      .addConverterFactory(JacksonConverterFactory.create())
+      .build()
+      .create(GraviteeManagementApi.class);
   }
 
   /**
@@ -72,31 +77,19 @@ class ManagementApiHelper {
    */
   String createAndDeployApi(String name, String path, String backendUrl) {
     try {
-      // Step 1: Create API
-      String apiBody = mapper.writeValueAsString(buildApiBody(name, path, backendUrl));
-      HttpResponse<String> createResp = post(ORG_ENV + "/apis", apiBody);
+      Response<JsonNode> createResp = api.createApi(buildApiBody(name, path, backendUrl)).execute();
       assertStatus("create API '" + name + "'", createResp, 201);
-      String apiId = mapper.readTree(createResp.body()).path("id").asText();
+      String apiId = createResp.body().path("id").asText();
       LOGGER.info("Created API '{}' → id={}", name, apiId);
 
-      // Step 2: Create keyless plan
-      String planBody = mapper.writeValueAsString(buildPlanBody());
-      HttpResponse<String> planResp = post(ORG_ENV + "/apis/" + apiId + "/plans", planBody);
+      Response<JsonNode> planResp = api.createPlan(apiId, buildPlanBody()).execute();
       assertStatus("create plan for API '" + name + "'", planResp, 201);
-      String planId = mapper.readTree(planResp.body()).path("id").asText();
+      String planId = planResp.body().path("id").asText();
       LOGGER.info("Created plan {} for API {}", planId, apiId);
 
-      // Step 3: Publish plan
-      HttpResponse<String> publishResp = post(ORG_ENV + "/apis/" + apiId + "/plans/" + planId + "/_publish", "");
-      assertStatus("publish plan for API '" + name + "'", publishResp, 200);
-
-      // Step 4: Start API
-      HttpResponse<String> startResp = post(ORG_ENV + "/apis/" + apiId + "/_start", "");
-      assertStatus("start API '" + name + "'", startResp, 204, 200);
-
-      // Step 5: Deploy (triggers gateway sync)
-      HttpResponse<String> deployResp = post(ORG_ENV + "/apis/" + apiId + "/deployments", "");
-      assertStatus("deploy API '" + name + "'", deployResp, 200, 202, 204);
+      assertStatus("publish plan for API '" + name + "'", api.publishPlan(apiId, planId, EMPTY_BODY).execute(), 200);
+      assertStatus("start API '" + name + "'", api.startApi(apiId, EMPTY_BODY).execute(), 204, 200);
+      assertStatus("deploy API '" + name + "'", api.deployApi(apiId, EMPTY_BODY).execute(), 200, 202, 204);
       LOGGER.info("Deployed API '{}' (id={})", name, apiId);
 
       return apiId;
@@ -109,79 +102,82 @@ class ManagementApiHelper {
 
   // ---- Private helpers ----------------------------------------------------------------
 
-  private HttpResponse<String> post(String path, String jsonBody) throws Exception {
-    HttpRequest.BodyPublisher body = jsonBody.isEmpty()
-      ? HttpRequest.BodyPublishers.noBody()
-      : HttpRequest.BodyPublishers.ofString(jsonBody);
-
-    HttpRequest request = HttpRequest.newBuilder()
-      .uri(URI.create(baseUrl + path))
-      .header("Authorization", authHeader)
-      .header("Content-Type", "application/json")
-      .POST(body)
-      .build();
-
-    return http.send(request, HttpResponse.BodyHandlers.ofString());
+  private static String basicAuth(String user, String pass) {
+    return "Basic " + Base64.getEncoder().encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8));
   }
 
-  private void assertStatus(String step, HttpResponse<String> response, int... expected) {
+  private void assertStatus(String step, Response<?> resp, int... expected) {
     for (int code : expected) {
-      if (response.statusCode() == code) {
-        return;
-      }
+      if (resp.code() == code) return;
+    }
+    String body;
+    try {
+      body = resp.errorBody() != null ? resp.errorBody().string() : "";
+    } catch (Exception e) {
+      body = "(unreadable)";
     }
     throw new IllegalStateException(
-      "Step '" +
-        step +
-        "' returned HTTP " +
-        response.statusCode() +
-        " (expected one of " +
-        java.util.Arrays.toString(expected) +
-        "): " +
-        response.body()
+      "Step '%s' returned HTTP %d (expected one of %s): %s".formatted(
+        step,
+        resp.code(),
+        Arrays.toString(expected),
+        body
+      )
     );
   }
 
-  private ObjectNode buildApiBody(String name, String path, String backendUrl) {
-    ObjectNode body = mapper.createObjectNode();
-    body.put("name", name);
-    body.put("apiVersion", "1.0.0");
-    body.put("definitionVersion", "V4");
-    body.put("type", "PROXY");
-    body.put("description", "Integration test API for gravitee-reporter-sentry");
+  private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+  private static final RequestBody EMPTY_BODY = RequestBody.create(JSON, "");
 
-    // Listener — HTTP proxy on the given context path
-    ArrayNode listeners = body.putArray("listeners");
-    ObjectNode listener = listeners.addObject();
-    listener.put("type", "HTTP");
-    ArrayNode paths = listener.putArray("paths");
-    paths.addObject().put("path", path);
-    ArrayNode entrypoints = listener.putArray("entrypoints");
-    entrypoints.addObject().put("type", "http-proxy");
-
-    // Endpoint group — single backend target
-    ArrayNode groups = body.putArray("endpointGroups");
-    ObjectNode group = groups.addObject();
-    group.put("name", "default");
-    group.put("type", "http-proxy");
-    ArrayNode endpoints = group.putArray("endpoints");
-    ObjectNode endpoint = endpoints.addObject();
-    endpoint.put("name", "main");
-    endpoint.put("type", "http-proxy");
-    endpoint.put("weight", 1);
-    endpoint.put("inheritConfiguration", false);
-    ObjectNode config = endpoint.putObject("configuration");
-    config.put("target", backendUrl);
-
-    return body;
+  private static RequestBody json(String body) {
+    return RequestBody.create(JSON, body);
   }
 
-  private ObjectNode buildPlanBody() {
-    ObjectNode plan = mapper.createObjectNode();
-    plan.put("name", "Default Plan");
-    plan.put("definitionVersion", "V4");
-    ObjectNode security = plan.putObject("security");
-    security.put("type", "KEY_LESS");
-    return plan;
+  private RequestBody buildApiBody(String name, String path, String backendUrl) {
+    return json(
+      """
+      {
+        "name": "%s",
+        "apiVersion": "1.0.0",
+        "definitionVersion": "V4",
+        "type": "PROXY",
+        "description": "Integration test API for gravitee-reporter-sentry",
+        "listeners": [
+          {
+            "type": "HTTP",
+            "paths": [{ "path": "%s" }],
+            "entrypoints": [{ "type": "http-proxy" }]
+          }
+        ],
+        "endpointGroups": [
+          {
+            "name": "default",
+            "type": "http-proxy",
+            "endpoints": [
+              {
+                "name": "main",
+                "type": "http-proxy",
+                "weight": 1,
+                "inheritConfiguration": false,
+                "configuration": { "target": "%s" }
+              }
+            ]
+          }
+        ]
+      }
+      """.formatted(name, path, backendUrl)
+    );
+  }
+
+  private static RequestBody buildPlanBody() {
+    return json(
+      """
+      {
+        "name": "Default Plan",
+        "definitionVersion": "V4",
+        "security": { "type": "KEY_LESS" }
+      }
+      """
+    );
   }
 }

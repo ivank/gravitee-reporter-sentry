@@ -18,68 +18,29 @@ package io.gravitee.reporter.sentry.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.sentry.SpanStatus;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class SentryStatusMapperTest {
 
-  @Test
-  void http200_mapsToOk() {
-    assertThat(SentryStatusMapper.fromHttpStatus(200)).isEqualTo(SpanStatus.OK);
-  }
-
-  @Test
-  void http201_mapsToOk() {
-    assertThat(SentryStatusMapper.fromHttpStatus(201)).isEqualTo(SpanStatus.OK);
-  }
-
-  @Test
-  void http301_mapsToOk() {
-    assertThat(SentryStatusMapper.fromHttpStatus(301)).isEqualTo(SpanStatus.OK);
-  }
-
-  @Test
-  void http400_mapsToInvalidArgument() {
-    assertThat(SentryStatusMapper.fromHttpStatus(400)).isEqualTo(SpanStatus.INVALID_ARGUMENT);
-  }
-
-  @Test
-  void http401_mapsToUnauthenticated() {
-    assertThat(SentryStatusMapper.fromHttpStatus(401)).isEqualTo(SpanStatus.UNAUTHENTICATED);
-  }
-
-  @Test
-  void http403_mapsToPermissionDenied() {
-    assertThat(SentryStatusMapper.fromHttpStatus(403)).isEqualTo(SpanStatus.PERMISSION_DENIED);
-  }
-
-  @Test
-  void http404_mapsToNotFound() {
-    assertThat(SentryStatusMapper.fromHttpStatus(404)).isEqualTo(SpanStatus.NOT_FOUND);
-  }
-
-  @Test
-  void http409_mapsToAlreadyExists() {
-    assertThat(SentryStatusMapper.fromHttpStatus(409)).isEqualTo(SpanStatus.ALREADY_EXISTS);
-  }
-
-  @Test
-  void http429_mapsToResourceExhausted() {
-    assertThat(SentryStatusMapper.fromHttpStatus(429)).isEqualTo(SpanStatus.RESOURCE_EXHAUSTED);
-  }
-
-  @Test
-  void http500_mapsToInternalError() {
-    assertThat(SentryStatusMapper.fromHttpStatus(500)).isEqualTo(SpanStatus.INTERNAL_ERROR);
-  }
-
-  @Test
-  void http503_mapsToInternalError() {
-    assertThat(SentryStatusMapper.fromHttpStatus(503)).isEqualTo(SpanStatus.INTERNAL_ERROR);
-  }
-
-  @Test
-  void http418_mapsToUnknownError() {
-    // 418 I'm a teapot — recognised 4xx but not specifically mapped
-    assertThat(SentryStatusMapper.fromHttpStatus(418)).isEqualTo(SpanStatus.UNKNOWN_ERROR);
+  @ParameterizedTest(name = "HTTP {0} → {1}")
+  @CsvSource(
+    {
+      "200, OK",
+      "201, OK",
+      "301, OK",
+      "400, INVALID_ARGUMENT",
+      "401, UNAUTHENTICATED",
+      "403, PERMISSION_DENIED",
+      "404, NOT_FOUND",
+      "409, ALREADY_EXISTS",
+      "429, RESOURCE_EXHAUSTED",
+      "500, INTERNAL_ERROR",
+      "503, INTERNAL_ERROR",
+      "418, UNKNOWN_ERROR",
+    }
+  )
+  void fromHttpStatus(int code, SpanStatus expected) {
+    assertThat(SentryStatusMapper.fromHttpStatus(code)).isEqualTo(expected);
   }
 }
