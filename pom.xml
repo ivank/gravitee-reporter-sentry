@@ -386,23 +386,23 @@
                                     <rules>
                                         <requireProperty>
                                             <property>SENTRY_DSN</property>
-                                            <regex>^(?!\$\{).*\S.*</regex>
-                                            <message>SENTRY_DSN is not set. Add it to local.properties or export it as an environment variable.</message>
+                                            <regex>^https?://.+@.+/\d+$</regex>
+                                            <message>SENTRY_DSN must be a valid Sentry DSN URL (e.g. https://key@o0.ingest.sentry.io/123456).</message>
                                         </requireProperty>
                                         <requireProperty>
                                             <property>SENTRY_TEST_TOKEN</property>
-                                            <regex>^(?!\$\{).*\S.*</regex>
-                                            <message>SENTRY_TEST_TOKEN is not set. Add it to local.properties or export it as an environment variable.</message>
+                                            <regex>^([0-9a-f]{64}|sntrys_[A-Za-z0-9+/=_-]+)$</regex>
+                                            <message>SENTRY_TEST_TOKEN must be a valid Sentry auth token: either a 64-char hex string or a sntrys_... token.</message>
                                         </requireProperty>
                                         <requireProperty>
                                             <property>SENTRY_TEST_ORG</property>
-                                            <regex>^(?!\$\{).*\S.*</regex>
-                                            <message>SENTRY_TEST_ORG is not set. Add it to local.properties or export it as an environment variable.</message>
+                                            <regex>^[a-z0-9]([a-z0-9-]*[a-z0-9])?$</regex>
+                                            <message>SENTRY_TEST_ORG must be a valid Sentry organization slug (lowercase letters, numbers, and hyphens; no leading or trailing hyphens).</message>
                                         </requireProperty>
                                         <requireProperty>
                                             <property>SENTRY_TEST_PROJECT</property>
-                                            <regex>^(?!\$\{).*\S.*</regex>
-                                            <message>SENTRY_TEST_PROJECT is not set. Add it to local.properties or export it as an environment variable.</message>
+                                            <regex>^[a-z0-9]([a-z0-9-]*[a-z0-9])?$</regex>
+                                            <message>SENTRY_TEST_PROJECT must be a valid Sentry project slug (lowercase letters, numbers, and hyphens; no leading or trailing hyphens).</message>
                                         </requireProperty>
                                     </rules>
                                 </configuration>
