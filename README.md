@@ -107,6 +107,10 @@ mvn prettier:write license:format
 # Compile and run all tests
 mvn verify
 
+# Run integration tests 
+# This will require populating local.properties using local.properties.template
+mvn clean verify --activate-profiles integration-test
+
 # Build the distributable plugin ZIP
 mvn clean package
 ```
