@@ -15,7 +15,6 @@
  */
 package io.gravitee.reporter.sentry.spring;
 
-import io.gravitee.reporter.sentry.SentryReporter;
 import io.gravitee.reporter.sentry.config.SentryReporterConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,12 +32,5 @@ public class PluginConfiguration {
   @Bean
   public SentryReporterConfiguration sentryReporterConfiguration() {
     return new SentryReporterConfiguration();
-  }
-
-  @Bean
-  public SentryReporter sentryReporter(
-    SentryReporterConfiguration configuration
-  ) {
-    return new SentryReporter(configuration);
   }
 }

@@ -43,9 +43,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MetricsToSentryMapper {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(
-    MetricsToSentryMapper.class
-  );
+  private static final Logger LOGGER = LoggerFactory.getLogger(MetricsToSentryMapper.class);
 
   /**
    * Matches path segments that look like numeric IDs or UUIDs so they can be replaced with
@@ -69,14 +67,8 @@ public class MetricsToSentryMapper {
    * @param scope   the isolated Sentry scope for this request (prevents tag bleed between threads)
    */
   public void map(Metrics metrics, IScope scope) {
-    String method = metrics.getHttpMethod() != null
-      ? metrics.getHttpMethod().name()
-      : "UNKNOWN";
-    String path = sanitizePath(
-      metrics.getMappedPath() != null
-        ? metrics.getMappedPath()
-        : metrics.getUri()
-    );
+    String method = metrics.getHttpMethod() != null ? metrics.getHttpMethod().name() : "UNKNOWN";
+    String path = sanitizePath(metrics.getMappedPath() != null ? metrics.getMappedPath() : metrics.getUri());
     String txName = method + " " + (path != null ? path : "/");
 
     long startMs = metrics.getTimestamp();
@@ -91,14 +83,8 @@ public class MetricsToSentryMapper {
       tx.setData("http.method", method);
       tx.setData("http.status_code", metrics.getStatus());
       tx.setData("http.url", metrics.getUri());
-      tx.setData(
-        "http.request_content_length",
-        metrics.getRequestContentLength()
-      );
-      tx.setData(
-        "http.response_content_length",
-        metrics.getResponseContentLength()
-      );
+      tx.setData("http.request_content_length", metrics.getRequestContentLength());
+      tx.setData("http.response_content_length", metrics.getResponseContentLength());
       tx.setData("net.host.name", metrics.getHost());
       tx.setData("net.peer.ip", metrics.getRemoteAddress());
 
@@ -106,27 +92,12 @@ public class MetricsToSentryMapper {
       setTagIfNotNull(tx, "gravitee.api_id", metrics.getApiId());
       setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
       setTagIfNotNull(tx, "gravitee.plan_id", metrics.getPlanId());
-      setTagIfNotNull(
-        tx,
-        "gravitee.application_id",
-        metrics.getApplicationId()
-      );
-      setTagIfNotNull(
-        tx,
-        "gravitee.environment_id",
-        metrics.getEnvironmentId()
-      );
-      setTagIfNotNull(
-        tx,
-        "gravitee.subscription_id",
-        metrics.getSubscriptionId()
-      );
+      setTagIfNotNull(tx, "gravitee.application_id", metrics.getApplicationId());
+      setTagIfNotNull(tx, "gravitee.subscription_id", metrics.getSubscriptionId());
       setTagIfNotNull(
         tx,
         "gravitee.security_type",
-        metrics.getSecurityType() != null
-          ? metrics.getSecurityType().name()
-          : null
+        metrics.getSecurityType() != null ? metrics.getSecurityType().name() : null
       );
 
       // Performance measurements — appear as charts in Sentry Performance dashboard
@@ -135,26 +106,14 @@ public class MetricsToSentryMapper {
         metrics.getGatewayResponseTimeMs(),
         MeasurementUnit.Duration.MILLISECOND
       );
-      tx.setMeasurement(
-        "gateway_latency",
-        metrics.getGatewayLatencyMs(),
-        MeasurementUnit.Duration.MILLISECOND
-      );
+      tx.setMeasurement("gateway_latency", metrics.getGatewayLatencyMs(), MeasurementUnit.Duration.MILLISECOND);
       tx.setMeasurement(
         "endpoint_response_time",
         metrics.getEndpointResponseTimeMs(),
         MeasurementUnit.Duration.MILLISECOND
       );
-      tx.setMeasurement(
-        "response_size",
-        metrics.getResponseContentLength(),
-        MeasurementUnit.Information.BYTE
-      );
-      tx.setMeasurement(
-        "request_size",
-        metrics.getRequestContentLength(),
-        MeasurementUnit.Information.BYTE
-      );
+      tx.setMeasurement("response_size", metrics.getResponseContentLength(), MeasurementUnit.Information.BYTE);
+      tx.setMeasurement("request_size", metrics.getRequestContentLength(), MeasurementUnit.Information.BYTE);
 
       // Capture an error event for 5xx responses if configured
       if (configuration.isCaptureErrors() && metrics.getStatus() >= 500) {
@@ -162,11 +121,7 @@ public class MetricsToSentryMapper {
       }
     } catch (Exception e) {
       // Reporters must never propagate exceptions — gateway stability takes priority.
-      LOGGER.warn(
-        "Failed to report metrics to Sentry for transaction '{}': {}",
-        txName,
-        e.getMessage()
-      );
+      LOGGER.warn("Failed to report metrics to Sentry for transaction '{}': {}", txName, e.getMessage());
     } finally {
       // Always finish the transaction — even if an exception occurred above
       long endMs = startMs + metrics.getGatewayResponseTimeMs();
@@ -185,9 +140,7 @@ public class MetricsToSentryMapper {
         metrics.getStatus() +
         " on " +
         txName +
-        (metrics.getErrorKey() != null
-            ? " [" + metrics.getErrorKey() + "]"
-            : "")
+        (metrics.getErrorKey() != null ? " [" + metrics.getErrorKey() + "]" : "")
     );
     event.setMessage(msg);
 
@@ -214,27 +167,16 @@ public class MetricsToSentryMapper {
    * Converts a Unix epoch millisecond timestamp to Sentry's {@link SentryNanotimeDate}.
    */
   static SentryNanotimeDate toSentryDate(long epochMillis) {
-    return new SentryNanotimeDate(
-      new Date(epochMillis),
-      TimeUnit.MILLISECONDS.toNanos(epochMillis)
-    );
+    return new SentryNanotimeDate(new Date(epochMillis), TimeUnit.MILLISECONDS.toNanos(epochMillis));
   }
 
-  private static void setTagIfNotNull(
-    ITransaction tx,
-    String key,
-    String value
-  ) {
+  private static void setTagIfNotNull(ITransaction tx, String key, String value) {
     if (value != null) {
       tx.setTag(key, value);
     }
   }
 
-  private static void setTagIfNotNull(
-    SentryEvent event,
-    String key,
-    String value
-  ) {
+  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
     if (value != null) {
       event.setTag(key, value);
     }

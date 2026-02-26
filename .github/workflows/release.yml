@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+      - name: Set Maven version
+        run: |
+          mvn --batch-mode versions:set \
+              -DnewVersion=${{ steps.version.outputs.version }} \
+              -DgenerateBackupPoms=false
+      - name: Run unit tests and build ZIP
+        run: mvn --batch-mode verify
+      - name: Cache Docker images
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-images
+          key: docker-${{ hashFiles('src/test/java/**/SentryReporterIT.java') }}
+      - name: Load Docker images from cache
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/docker-images/images.tar
+      - name: Pull and save Docker images
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull mongo:7.0
+          docker pull graviteeio/apim-management-api:4.9.13
+          docker pull mccutchen/go-httpbin
+          docker pull graviteeio/apim-gateway:4.9.13
+          mkdir -p /tmp/docker-images
+          docker save \
+            mongo:7.0 \
+            graviteeio/apim-management-api:4.9.13 \
+            mccutchen/go-httpbin \
+            graviteeio/apim-gateway:4.9.13 \
+            -o /tmp/docker-images/images.tar
+      - name: Run integration tests
+        run: mvn --batch-mode failsafe:integration-test failsafe:verify -Pintegration-test
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_TEST_TOKEN: ${{ secrets.SENTRY_TEST_TOKEN }}
+          SENTRY_TEST_PROJECT: ${{ vars.SENTRY_TEST_PROJECT }}
+          SENTRY_TEST_ORG: ${{ vars.SENTRY_TEST_ORG }}
+      - name: Upload ZIP to GitHub Release
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} \
+            target/gravitee-reporter-sentry-${{ steps.version.outputs.version }}.zip \
+            --clobber

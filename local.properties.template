@@ -1,0 +1,8 @@
+# Integration-test credentials template.
+# Copy this file to local.properties (which is gitignored) and fill in your values.
+# Environment variables always take precedence over values in this file (for CI/CD).
+
+SENTRY_DSN=
+SENTRY_TEST_TOKEN=
+SENTRY_TEST_ORG=
+SENTRY_TEST_PROJECT=

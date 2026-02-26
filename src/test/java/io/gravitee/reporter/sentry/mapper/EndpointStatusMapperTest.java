@@ -39,53 +39,33 @@ class EndpointStatusMapperTest {
   @Test
   void map_nonTransition_doesNotCaptureEvent() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      EndpointStatus status = buildStatus(
-        false /* success */,
-        false /* available */,
-        false /* transition */
-      );
+      EndpointStatus status = buildStatus(false /* success */, false /* available */, false /* transition */);
 
       mapper.map(status);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
     }
   }
 
   @Test
   void map_successNonTransition_doesNotCaptureEvent() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      EndpointStatus status = buildStatus(
-        true /* success */,
-        true /* available */,
-        false /* transition */
-      );
+      EndpointStatus status = buildStatus(true /* success */, true /* available */, false /* transition */);
 
       mapper.map(status);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
     }
   }
 
   @Test
   void map_transitionToUnavailable_capturesErrorEvent() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      EndpointStatus status = buildStatus(
-        false /* success */,
-        false /* available */,
-        true /* transition */
-      );
+      EndpointStatus status = buildStatus(false /* success */, false /* available */, true /* transition */);
 
       mapper.map(status);
 
-      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(
-        SentryEvent.class
-      );
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
       SentryEvent event = captor.getValue();
@@ -96,17 +76,11 @@ class EndpointStatusMapperTest {
   @Test
   void map_transitionToAvailable_capturesInfoEvent() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      EndpointStatus status = buildStatus(
-        true /* success */,
-        true /* available */,
-        true /* transition */
-      );
+      EndpointStatus status = buildStatus(true /* success */, true /* available */, true /* transition */);
 
       mapper.map(status);
 
-      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(
-        SentryEvent.class
-      );
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
       SentryEvent event = captor.getValue();
@@ -127,9 +101,7 @@ class EndpointStatusMapperTest {
 
       mapper.map(status);
 
-      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(
-        SentryEvent.class
-      );
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
       sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(1));
 
       SentryEvent event = captor.getValue();
@@ -157,11 +129,7 @@ class EndpointStatusMapperTest {
   }
 
   // Helper: build an EndpointStatus using the builder API
-  private static EndpointStatus buildStatus(
-    boolean success,
-    boolean available,
-    boolean transition
-  ) {
+  private static EndpointStatus buildStatus(boolean success, boolean available, boolean transition) {
     return EndpointStatus.builder()
       .api("api-abc")
       .apiName("Test API")

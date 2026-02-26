@@ -35,9 +35,7 @@ import org.slf4j.LoggerFactory;
  */
 public class LogToSentryMapper {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(
-    LogToSentryMapper.class
-  );
+  private static final Logger LOGGER = LoggerFactory.getLogger(LogToSentryMapper.class);
 
   /**
    * Adds request and response breadcrumbs for the given {@link Log}.
@@ -51,16 +49,9 @@ public class LogToSentryMapper {
         Breadcrumb requestCrumb = new Breadcrumb();
         requestCrumb.setType("http");
         requestCrumb.setCategory("http.request");
-        requestCrumb.setMessage(
-          (req.getMethod() != null ? req.getMethod().name() : "UNKNOWN") +
-            " " +
-            req.getUri()
-        );
+        requestCrumb.setMessage((req.getMethod() != null ? req.getMethod().name() : "UNKNOWN") + " " + req.getUri());
         requestCrumb.setData("request_id", log.getRequestId());
-        requestCrumb.setData(
-          "method",
-          req.getMethod() != null ? req.getMethod().name() : null
-        );
+        requestCrumb.setData("method", req.getMethod() != null ? req.getMethod().name() : null);
         requestCrumb.setData("url", req.getUri());
         if (req.getBody() != null && !req.getBody().isEmpty()) {
           requestCrumb.setData("body", truncate(req.getBody(), 2048));
@@ -73,9 +64,7 @@ public class LogToSentryMapper {
         Breadcrumb responseCrumb = new Breadcrumb();
         responseCrumb.setType("http");
         responseCrumb.setCategory("http.response");
-        responseCrumb.setMessage(
-          "HTTP " + resp.getStatus() + " (requestId=" + log.getRequestId() + ")"
-        );
+        responseCrumb.setMessage("HTTP " + resp.getStatus() + " (requestId=" + log.getRequestId() + ")");
         responseCrumb.setData("status_code", resp.getStatus());
         responseCrumb.setData("request_id", log.getRequestId());
         if (resp.getBody() != null && !resp.getBody().isEmpty()) {
@@ -84,11 +73,7 @@ public class LogToSentryMapper {
         Sentry.addBreadcrumb(responseCrumb);
       }
     } catch (Exception e) {
-      LOGGER.warn(
-        "Failed to add log breadcrumbs to Sentry for requestId '{}': {}",
-        log.getRequestId(),
-        e.getMessage()
-      );
+      LOGGER.warn("Failed to add log breadcrumbs to Sentry for requestId '{}': {}", log.getRequestId(), e.getMessage());
     }
   }
 

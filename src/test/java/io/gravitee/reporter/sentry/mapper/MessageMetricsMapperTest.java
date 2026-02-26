@@ -63,13 +63,7 @@ class MessageMetricsMapperTest {
 
       mapper.map(metrics);
 
-      sentryMock.verify(() ->
-        Sentry.startTransaction(
-          eq("SUBSCRIBE my-endpoint"),
-          eq("message.broker"),
-          any()
-        )
-      );
+      sentryMock.verify(() -> Sentry.startTransaction(eq("SUBSCRIBE my-endpoint"), eq("message.broker"), any()));
       verify(mockTx).setStatus(SpanStatus.OK);
       verify(mockTx).finish(any(), any());
     }
@@ -78,10 +72,7 @@ class MessageMetricsMapperTest {
   @Test
   void map_errorMetrics_setsInternalErrorStatus() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      ITransaction mockTx = mockTransaction(
-        sentryMock,
-        SpanStatus.INTERNAL_ERROR
-      );
+      ITransaction mockTx = mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
 
       MessageMetrics metrics = MessageMetrics.builder()
         .operation(MessageOperation.PUBLISH)
@@ -111,10 +102,7 @@ class MessageMetricsMapperTest {
 
       mapper.map(metrics);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        times(1)
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), times(1));
     }
   }
 
@@ -132,10 +120,7 @@ class MessageMetricsMapperTest {
 
       mapper.map(metrics);
 
-      sentryMock.verify(
-        () -> Sentry.captureEvent(any(SentryEvent.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
     }
   }
 
@@ -144,17 +129,11 @@ class MessageMetricsMapperTest {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
       mockTransaction(sentryMock, SpanStatus.OK);
 
-      MessageMetrics metrics = MessageMetrics.builder()
-        .operation(null)
-        .connectorId("endpoint-x")
-        .error(false)
-        .build();
+      MessageMetrics metrics = MessageMetrics.builder().operation(null).connectorId("endpoint-x").error(false).build();
 
       mapper.map(metrics);
 
-      sentryMock.verify(() ->
-        Sentry.startTransaction(eq("UNKNOWN endpoint-x"), anyString(), any())
-      );
+      sentryMock.verify(() -> Sentry.startTransaction(eq("UNKNOWN endpoint-x"), anyString(), any()));
     }
   }
 
@@ -162,9 +141,7 @@ class MessageMetricsMapperTest {
   void map_transactionIsAlwaysFinished() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
       ITransaction mockTx = mockTransaction(sentryMock, SpanStatus.OK);
-      doThrow(new RuntimeException("tag error"))
-        .when(mockTx)
-        .setTag(anyString(), anyString());
+      doThrow(new RuntimeException("tag error")).when(mockTx).setTag(anyString(), anyString());
 
       MessageMetrics metrics = MessageMetrics.builder()
         .operation(MessageOperation.SUBSCRIBE)
@@ -179,15 +156,10 @@ class MessageMetricsMapperTest {
     }
   }
 
-  private ITransaction mockTransaction(
-    MockedStatic<Sentry> sentryMock,
-    SpanStatus status
-  ) {
+  private ITransaction mockTransaction(MockedStatic<Sentry> sentryMock, SpanStatus status) {
     ITransaction mockTx = mock(ITransaction.class);
     when(mockTx.getStatus()).thenReturn(status);
-    sentryMock
-      .when(() -> Sentry.startTransaction(anyString(), anyString(), any()))
-      .thenReturn(mockTx);
+    sentryMock.when(() -> Sentry.startTransaction(anyString(), anyString(), any())).thenReturn(mockTx);
     return mockTx;
   }
 }

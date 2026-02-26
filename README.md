@@ -5,20 +5,20 @@ telemetry to [Sentry.io](https://sentry.io/).
 
 ## What it does
 
-| Gravitee event | Sentry output |
-|---|---|
-| HTTP request/response (`v4.metric.Metrics`) | Performance **Transaction** (p50/p95/p99 latency charts) + optional error event for 5xx |
-| Full request/response body (`v4.log.Log`) | **Breadcrumbs** on the global scope (opt-in, off by default) |
-| Async-message metrics (`v4.metric.MessageMetrics`) | Performance **Transaction** per message batch |
-| Health-check result (`health.EndpointStatus`) | **Error event** on state transition (up→down = ERROR, down→up = INFO) |
+| Gravitee event                                     | Sentry output                                                                           |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| HTTP request/response (`v4.metric.Metrics`)        | Performance **Transaction** (p50/p95/p99 latency charts) + optional error event for 5xx |
+| Full request/response body (`v4.log.Log`)          | **Breadcrumbs** on the global scope (opt-in, off by default)                            |
+| Async-message metrics (`v4.metric.MessageMetrics`) | Performance **Transaction** per message batch                                           |
+| Health-check result (`health.EndpointStatus`)      | **Error event** on state transition (up→down = ERROR, down→up = INFO)                   |
 
 ## Requirements
 
-| Component | Version |
-|---|---|
-| Gravitee APIM | 4.9.x |
-| JDK | 17+ |
-| Sentry Java SDK (bundled) | 8.3.0 |
+| Component                 | Version |
+| ------------------------- | ------- |
+| Gravitee APIM             | 4.9.x   |
+| JDK                       | 17+     |
+| Sentry Java SDK (bundled) | 8.3.0   |
 
 ## Installation
 
@@ -66,15 +66,23 @@ reporters:
 Transactions produced by this reporter follow
 [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/reference/specification/trace/semantic_conventions/http/):
 
-| Sentry field | Value |
-|---|---|
-| Transaction name | `{METHOD} {sanitized-path}` e.g. `GET /users/{id}/orders` |
-| Operation | `http.server` |
-| Tags | `gravitee.api_id`, `gravitee.plan_id`, `gravitee.application_id`, `gravitee.subscription_id`, … |
-| Measurements | `gateway_response_time`, `gateway_latency`, `endpoint_response_time`, `response_size`, `request_size` |
+| Sentry field     | Value                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Transaction name | `{METHOD} {sanitized-path}` e.g. `GET /users/{id}/orders`                                             |
+| Operation        | `http.server`                                                                                         |
+| Tags             | `gravitee.api_id`, `gravitee.plan_id`, `gravitee.application_id`, `gravitee.subscription_id`, …       |
+| Measurements     | `gateway_response_time`, `gateway_latency`, `endpoint_response_time`, `response_size`, `request_size` |
 
 Numeric IDs and UUIDs in paths are replaced with `{id}` to reduce cardinality
 (e.g. `/users/123/orders` → `/users/{id}/orders`).
+
+## Linting
+
+using maven prettier plugin
+
+```bash
+mvn prettier:write license:format
+```
 
 ## Building
 

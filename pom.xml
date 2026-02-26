@@ -48,8 +48,7 @@
         <!-- Sentry Java SDK — latest stable Feb 2026 -->
         <sentry.version>8.3.0</sentry.version>
         <!-- Java version — APIM 4.x requires JDK 17 -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <!-- Publish folder used by gravitee-parent release plugin -->
         <publish-folder-path>graviteeio-apim/plugins/reporters</publish-folder-path>
     </properties>
@@ -73,6 +72,14 @@
                 <groupId>io.gravitee.reporter</groupId>
                 <artifactId>gravitee-reporter-api</artifactId>
                 <version>2.1.0</version>
+            </dependency>
+            <!-- Testcontainers BOM: pins all org.testcontainers artifacts to one version -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.20.4</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -180,6 +187,43 @@
             <artifactId>logback-classic</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- =========================================================
+             INTEGRATION TEST — Testcontainers + helpers
+             ========================================================= -->
+
+        <!-- Testcontainers core: GenericContainer, Network, MountableFile, Startables -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 5 bridge: @Testcontainers + @Container lifecycle annotations -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- MongoDBContainer: purpose-built wait strategy for MongoDB -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Jackson: build Management API JSON bodies and parse Sentry API responses -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Awaitility: replaces Thread.sleep for all async waits in integration tests -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -197,8 +241,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <release>17</release>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -215,6 +258,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <useModulePath>false</useModulePath>
+                    <!-- Exclude @Tag("integration") tests — those run via failsafe -Pintegration-test -->
+                    <excludedGroups>integration</excludedGroups>
                     <!--
                       ByteBuddy (bundled in Mockito) declares support up to the previous Java GA
                       release. Set experimental flag to allow it to run on newer JDK versions.
@@ -270,4 +315,136 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!--
+              Activate with: mvn clean verify -Pintegration-test
+              Requires: Docker running, target/*.zip present (built by package phase).
+              Failsafe runs after the package phase so the plugin ZIP is always available.
+
+              Credentials (local): copy local.properties.template to local.properties and fill
+              in values. Maven loads the file automatically via properties-maven-plugin.
+
+              Credentials (CI/CD): set SENTRY_DSN, SENTRY_TEST_TOKEN, SENTRY_TEST_ORG, and
+              SENTRY_TEST_PROJECT as environment variables.
+            -->
+            <id>integration-test</id>
+            <properties>
+                <!-- Default ENV values — overridden by local.properties when the file exists. -->
+                <SENTRY_DSN>${env.SENTRY_DSN}</SENTRY_DSN>
+                <SENTRY_TEST_TOKEN>${env.SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
+                <SENTRY_TEST_ORG>${env.SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
+                <SENTRY_TEST_PROJECT>${env.SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
+            </properties>
+            <build>
+                <plugins>
+                    <!--
+                      Load local.properties into Maven project properties so the values can be
+                      forwarded to the test JVM as system properties via failsafe below.
+                      quiet=true silently skips when the file is absent (CI/CD).
+                    -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>properties-maven-plugin</artifactId>
+                        <version>1.2.1</version>
+                        <executions>
+                            <execution>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>read-project-properties</goal>
+                                </goals>
+                                <configuration>
+                                    <files>
+                                        <file>${project.basedir}/local.properties</file>
+                                    </files>
+                                    <quiet>true</quiet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!--
+                      Fail fast if any required credential is missing or unresolved.
+                      Runs after initialize (where local.properties is loaded) so that
+                      values supplied via local.properties are visible to the check.
+                      A property is considered missing when it still contains the literal
+                      Maven placeholder (e.g. ${env.SENTRY_TEST_PROJECT}) because the
+                      environment variable was not set and local.properties has no entry.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>require-integration-test-credentials</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireProperty>
+                                            <property>SENTRY_DSN</property>
+                                            <regex>^https?://.+@.+/\d+$</regex>
+                                            <message>SENTRY_DSN must be a valid Sentry DSN URL (e.g. https://key@o0.ingest.sentry.io/123456).</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_TOKEN</property>
+                                            <regex>^([0-9a-f]{64}|sntrys_[A-Za-z0-9+/=_-]+)$</regex>
+                                            <message>SENTRY_TEST_TOKEN must be a valid Sentry auth token: either a 64-char hex string or a sntrys_... token.</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_ORG</property>
+                                            <regex>^[a-z0-9]([a-z0-9-]*[a-z0-9])?$</regex>
+                                            <message>SENTRY_TEST_ORG must be a valid Sentry organization slug (lowercase letters, numbers, and hyphens; no leading or trailing hyphens).</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_PROJECT</property>
+                                            <regex>^[a-z0-9]([a-z0-9-]*[a-z0-9])?$</regex>
+                                            <message>SENTRY_TEST_PROJECT must be a valid Sentry project slug (lowercase letters, numbers, and hyphens; no leading or trailing hyphens).</message>
+                                        </requireProperty>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <!--
+                              Pass credentials as JVM system properties.
+                              Values come from local.properties (local dev) or stay empty when
+                              the file is absent. The test checks System.getenv() first, so
+                              environment variables set by CI/CD always take precedence.
+                            -->
+                            <systemPropertyVariables>
+                                <project.version>${project.version}</project.version>
+                                <SENTRY_DSN>${SENTRY_DSN}</SENTRY_DSN>
+                                <SENTRY_TEST_TOKEN>${SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
+                                <SENTRY_TEST_ORG>${SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
+                                <SENTRY_TEST_PROJECT>${SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
+                            </systemPropertyVariables>
+                            <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

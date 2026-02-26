@@ -48,18 +48,11 @@ class LogToSentryMapperTest {
 
       Response resp = new Response(200);
 
-      Log log = Log.builder()
-        .requestId("req-1")
-        .entrypointRequest(req)
-        .entrypointResponse(resp)
-        .build();
+      Log log = Log.builder().requestId("req-1").entrypointRequest(req).entrypointResponse(resp).build();
 
       mapper.map(log);
 
-      sentryMock.verify(
-        () -> Sentry.addBreadcrumb(any(Breadcrumb.class)),
-        times(2)
-      );
+      sentryMock.verify(() -> Sentry.addBreadcrumb(any(Breadcrumb.class)), times(2));
     }
   }
 
@@ -68,18 +61,11 @@ class LogToSentryMapperTest {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
       Response resp = new Response(500);
 
-      Log log = Log.builder()
-        .requestId("req-2")
-        .entrypointRequest(null)
-        .entrypointResponse(resp)
-        .build();
+      Log log = Log.builder().requestId("req-2").entrypointRequest(null).entrypointResponse(resp).build();
 
       mapper.map(log);
 
-      sentryMock.verify(
-        () -> Sentry.addBreadcrumb(any(Breadcrumb.class)),
-        times(1)
-      );
+      sentryMock.verify(() -> Sentry.addBreadcrumb(any(Breadcrumb.class)), times(1));
     }
   }
 
@@ -90,18 +76,11 @@ class LogToSentryMapperTest {
       req.setMethod(HttpMethod.DELETE);
       req.setUri("/api/v1/item/1");
 
-      Log log = Log.builder()
-        .requestId("req-3")
-        .entrypointRequest(req)
-        .entrypointResponse(null)
-        .build();
+      Log log = Log.builder().requestId("req-3").entrypointRequest(req).entrypointResponse(null).build();
 
       mapper.map(log);
 
-      sentryMock.verify(
-        () -> Sentry.addBreadcrumb(any(Breadcrumb.class)),
-        times(1)
-      );
+      sentryMock.verify(() -> Sentry.addBreadcrumb(any(Breadcrumb.class)), times(1));
     }
   }
 
@@ -116,9 +95,7 @@ class LogToSentryMapperTest {
 
       mapper.map(log);
 
-      ArgumentCaptor<Breadcrumb> captor = ArgumentCaptor.forClass(
-        Breadcrumb.class
-      );
+      ArgumentCaptor<Breadcrumb> captor = ArgumentCaptor.forClass(Breadcrumb.class);
       sentryMock.verify(() -> Sentry.addBreadcrumb(captor.capture()), times(1));
 
       Breadcrumb crumb = captor.getValue();
@@ -140,9 +117,7 @@ class LogToSentryMapperTest {
 
       mapper.map(log);
 
-      ArgumentCaptor<Breadcrumb> captor = ArgumentCaptor.forClass(
-        Breadcrumb.class
-      );
+      ArgumentCaptor<Breadcrumb> captor = ArgumentCaptor.forClass(Breadcrumb.class);
       sentryMock.verify(() -> Sentry.addBreadcrumb(captor.capture()));
 
       String body = (String) captor.getValue().getData().get("body");
@@ -154,18 +129,11 @@ class LogToSentryMapperTest {
   @Test
   void map_nullRequestAndResponse_doesNotAddBreadcrumbs() {
     try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
-      Log log = Log.builder()
-        .requestId("req-6")
-        .entrypointRequest(null)
-        .entrypointResponse(null)
-        .build();
+      Log log = Log.builder().requestId("req-6").entrypointRequest(null).entrypointResponse(null).build();
 
       mapper.map(log);
 
-      sentryMock.verify(
-        () -> Sentry.addBreadcrumb(any(Breadcrumb.class)),
-        never()
-      );
+      sentryMock.verify(() -> Sentry.addBreadcrumb(any(Breadcrumb.class)), never());
     }
   }
 
@@ -183,9 +151,7 @@ class LogToSentryMapperTest {
 
   @Test
   void truncate_longString_appendsEllipsis() {
-    assertThat(LogToSentryMapper.truncate("hello world", 5)).isEqualTo(
-      "hello…"
-    );
+    assertThat(LogToSentryMapper.truncate("hello world", 5)).isEqualTo("hello…");
   }
 
   @Test
