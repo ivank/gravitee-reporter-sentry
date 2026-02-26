@@ -24,7 +24,8 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Set Maven version
         run: |
-          mvn --batch-mode versions:set -DnewVersion=${{ steps.version.outputs.version }} \
+          mvn --batch-mode versions:set \
+              -DnewVersion=${{ steps.version.outputs.version }} \
               -DgenerateBackupPoms=false
       - name: Run unit tests and build ZIP
         run: mvn --batch-mode verify
@@ -32,9 +33,9 @@ jobs:
         run: mvn --batch-mode failsafe:integration-test failsafe:verify -Pintegration-test
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          SENTRY_TEST_TOKEN: ${{ secrets.SENTRY_TEST_TOKEN }}
-          SENTRY_TEST_ORG: ${{ secrets.SENTRY_TEST_ORG }}
+          SENTRY_TEST_TOKEN: ${{ vars.SENTRY_TEST_TOKEN }}
           SENTRY_TEST_PROJECT: ${{ secrets.SENTRY_TEST_PROJECT }}
+          SENTRY_TEST_ORG: ${{ vars.SENTRY_TEST_ORG }}
       - name: Upload ZIP to GitHub Release
         run: |
           gh release upload ${{ github.event.release.tag_name }} \
