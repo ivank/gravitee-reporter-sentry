@@ -48,8 +48,7 @@
         <!-- Sentry Java SDK — latest stable Feb 2026 -->
         <sentry.version>8.3.0</sentry.version>
         <!-- Java version — APIM 4.x requires JDK 17 -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <!-- Publish folder used by gravitee-parent release plugin -->
         <publish-folder-path>graviteeio-apim/plugins/reporters</publish-folder-path>
     </properties>
@@ -242,8 +241,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <release>17</release>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -329,12 +327,11 @@
               in values. Maven loads the file automatically via properties-maven-plugin.
 
               Credentials (CI/CD): set SENTRY_DSN, SENTRY_TEST_TOKEN, SENTRY_TEST_ORG, and
-              SENTRY_TEST_PROJECT as environment variables. Env vars always take precedence over
-              local.properties because the test checks System.getenv() before System.getProperty().
+              SENTRY_TEST_PROJECT as environment variables.
             -->
             <id>integration-test</id>
             <properties>
-                <!-- Default empty values — overridden by local.properties when the file exists. -->
+                <!-- Default ENV values — overridden by local.properties when the file exists. -->
                 <SENTRY_DSN>${env.SENTRY_DSN}</SENTRY_DSN>
                 <SENTRY_TEST_TOKEN>${env.SENTRY_TEST_TOKEN}</SENTRY_TEST_TOKEN>
                 <SENTRY_TEST_ORG>${env.SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
@@ -362,6 +359,52 @@
                                         <file>${project.basedir}/local.properties</file>
                                     </files>
                                     <quiet>true</quiet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!--
+                      Fail fast if any required credential is missing or unresolved.
+                      Runs after initialize (where local.properties is loaded) so that
+                      values supplied via local.properties are visible to the check.
+                      A property is considered missing when it still contains the literal
+                      Maven placeholder (e.g. ${env.SENTRY_TEST_PROJECT}) because the
+                      environment variable was not set and local.properties has no entry.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>require-integration-test-credentials</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireProperty>
+                                            <property>SENTRY_DSN</property>
+                                            <regex>^(?!\$\{).*\S.*</regex>
+                                            <message>SENTRY_DSN is not set. Add it to local.properties or export it as an environment variable.</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_TOKEN</property>
+                                            <regex>^(?!\$\{).*\S.*</regex>
+                                            <message>SENTRY_TEST_TOKEN is not set. Add it to local.properties or export it as an environment variable.</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_ORG</property>
+                                            <regex>^(?!\$\{).*\S.*</regex>
+                                            <message>SENTRY_TEST_ORG is not set. Add it to local.properties or export it as an environment variable.</message>
+                                        </requireProperty>
+                                        <requireProperty>
+                                            <property>SENTRY_TEST_PROJECT</property>
+                                            <regex>^(?!\$\{).*\S.*</regex>
+                                            <message>SENTRY_TEST_PROJECT is not set. Add it to local.properties or export it as an environment variable.</message>
+                                        </requireProperty>
+                                    </rules>
                                 </configuration>
                             </execution>
                         </executions>

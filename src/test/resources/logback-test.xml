@@ -10,9 +10,9 @@
   <logger name="tc" level="ERROR"/>
 
   <!-- Testcontainers internals — suppress wire noise -->
-  <logger name="org.testcontainers" level="ERROR"/>
-  <logger name="com.github.dockerjava" level="ERROR"/>
-  <logger name="org.apache.hc" level="ERROR"/>
+  <logger name="org.testcontainers" level="INFO"/>
+  <logger name="com.github.dockerjava" level="INFO"/>
+  <logger name="org.apache.hc" level="INFO"/>
 
   <!-- Test classes -->
   <logger name="io.gravitee.reporter.sentry" level="INFO"/>
