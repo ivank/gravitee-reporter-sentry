@@ -28,6 +28,7 @@ import io.sentry.SpanStatus;
 import io.sentry.TransactionOptions;
 import io.sentry.protocol.Message;
 import java.util.Date;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -67,7 +68,7 @@ public class MetricsToSentryMapper {
    * @param scope   the isolated Sentry scope for this request (prevents tag bleed between threads)
    */
   public void map(Metrics metrics, IScope scope) {
-    String method = metrics.getHttpMethod() != null ? metrics.getHttpMethod().name() : "UNKNOWN";
+    String method = Optional.ofNullable(metrics.getHttpMethod()).map(Enum::name).orElse("UNKNOWN");
     String path = sanitizePath(metrics.getMappedPath() != null ? metrics.getMappedPath() : metrics.getUri());
     String txName = method + " " + (path != null ? path : "/");
 
@@ -89,15 +90,13 @@ public class MetricsToSentryMapper {
       tx.setData("net.peer.ip", metrics.getRemoteAddress());
 
       // Gravitee-specific searchable tags (indexed in Sentry UI)
-      setTagIfNotNull(tx, "gravitee.api_id", metrics.getApiId());
-      setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
-      setTagIfNotNull(tx, "gravitee.plan_id", metrics.getPlanId());
-      setTagIfNotNull(tx, "gravitee.application_id", metrics.getApplicationId());
-      setTagIfNotNull(tx, "gravitee.subscription_id", metrics.getSubscriptionId());
-      setTagIfNotNull(
-        tx,
-        "gravitee.security_type",
-        metrics.getSecurityType() != null ? metrics.getSecurityType().name() : null
+      SentryTags.ifPresent(metrics.getApiId(), v -> tx.setTag("gravitee.api_id", v));
+      SentryTags.ifPresent(metrics.getApiName(), v -> tx.setTag("gravitee.api_name", v));
+      SentryTags.ifPresent(metrics.getPlanId(), v -> tx.setTag("gravitee.plan_id", v));
+      SentryTags.ifPresent(metrics.getApplicationId(), v -> tx.setTag("gravitee.application_id", v));
+      SentryTags.ifPresent(metrics.getSubscriptionId(), v -> tx.setTag("gravitee.subscription_id", v));
+      SentryTags.ifPresent(Optional.ofNullable(metrics.getSecurityType()).map(Enum::name).orElse(null), v ->
+        tx.setTag("gravitee.security_type", v)
       );
 
       // Performance measurements — appear as charts in Sentry Performance dashboard
@@ -145,9 +144,9 @@ public class MetricsToSentryMapper {
     event.setMessage(msg);
 
     event.setTag("http.status_code", String.valueOf(metrics.getStatus()));
-    setTagIfNotNull(event, "gravitee.api_id", metrics.getApiId());
-    setTagIfNotNull(event, "gravitee.api_name", metrics.getApiName());
-    setTagIfNotNull(event, "gravitee.error_key", metrics.getErrorKey());
+    SentryTags.ifPresent(metrics.getApiId(), v -> event.setTag("gravitee.api_id", v));
+    SentryTags.ifPresent(metrics.getApiName(), v -> event.setTag("gravitee.api_name", v));
+    SentryTags.ifPresent(metrics.getErrorKey(), v -> event.setTag("gravitee.error_key", v));
 
     Sentry.captureEvent(event);
   }
@@ -168,17 +167,5 @@ public class MetricsToSentryMapper {
    */
   static SentryNanotimeDate toSentryDate(long epochMillis) {
     return new SentryNanotimeDate(new Date(epochMillis), TimeUnit.MILLISECONDS.toNanos(epochMillis));
-  }
-
-  private static void setTagIfNotNull(ITransaction tx, String key, String value) {
-    if (value != null) {
-      tx.setTag(key, value);
-    }
-  }
-
-  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
-    if (value != null) {
-      event.setTag(key, value);
-    }
   }
 }

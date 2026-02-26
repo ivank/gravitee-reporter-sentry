@@ -14,25 +14,42 @@ telemetry to [Sentry.io](https://sentry.io/).
 
 ## Requirements
 
-| Component                 | Version |
-| ------------------------- | ------- |
-| Gravitee APIM             | 4.9.x   |
-| JDK                       | 17+     |
-| Sentry Java SDK (bundled) | 8.3.0   |
+| Component                 | Minimum | Notes                                                                 |
+| ------------------------- | ------- | --------------------------------------------------------------------- |
+| Gravitee APIM             | 4.7     | First release to ship JDK 21 gateway images                           |
+| JDK                       | 21      | Uses Java 21 language features (pattern matching switch, text blocks) |
+| Sentry Java SDK (bundled) | 8.3.0   |                                                                       |
 
 ## Installation
 
-1. Build the plugin ZIP:
-   ```bash
-   mvn clean package -DskipTests
-   ```
+### Download from GitHub Releases (recommended)
 
-2. Copy the ZIP into your Gravitee gateway plugins directory:
-   ```bash
-   cp target/gravitee-reporter-sentry-*.zip $GRAVITEE_HOME/plugins/
-   ```
+Replace `1.0.0` with the version you want, then run:
 
-3. Restart the gateway.
+```bash
+VERSION=1.0.0
+curl -fsSL \
+  "https://github.com/ivank/gravitee-reporter-sentry/releases/download/v${VERSION}/gravitee-reporter-sentry-${VERSION}.zip" \
+  -o gravitee-reporter-sentry.zip
+cp gravitee-reporter-sentry.zip $GRAVITEE_HOME/plugins/
+```
+
+Or as a one-liner that always fetches the latest release:
+
+```bash
+curl -fsSL \
+  "https://github.com/ivank/gravitee-reporter-sentry/releases/latest/download/gravitee-reporter-sentry.zip" \
+  -o "$GRAVITEE_HOME/plugins/gravitee-reporter-sentry.zip"
+```
+
+Restart the gateway after copying.
+
+### Build from source
+
+```bash
+mvn clean package -DskipTests
+cp target/gravitee-reporter-sentry-*.zip $GRAVITEE_HOME/plugins/
+```
 
 ## Configuration
 

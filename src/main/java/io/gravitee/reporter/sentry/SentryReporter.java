@@ -124,14 +124,12 @@ public class SentryReporter extends AbstractService<Reporter> implements Reporte
     }
 
     try {
-      if (reportable instanceof Metrics metrics) {
-        Sentry.withScope(scope -> metricsMapper.map(metrics, scope));
-      } else if (reportable instanceof Log log && configuration.isReportLogs()) {
-        logMapper.map(log);
-      } else if (reportable instanceof MessageMetrics messageMetrics && configuration.isReportMessageMetrics()) {
-        messageMetricsMapper.map(messageMetrics);
-      } else if (reportable instanceof EndpointStatus endpointStatus && configuration.isReportHealthChecks()) {
-        endpointStatusMapper.map(endpointStatus);
+      switch (reportable) {
+        case Metrics metrics -> Sentry.withScope(scope -> metricsMapper.map(metrics, scope));
+        case Log log when configuration.isReportLogs() -> logMapper.map(log);
+        case MessageMetrics mm when configuration.isReportMessageMetrics() -> messageMetricsMapper.map(mm);
+        case EndpointStatus es when configuration.isReportHealthChecks() -> endpointStatusMapper.map(es);
+        default -> {}
       }
     } catch (Exception e) {
       LOGGER.warn(
@@ -146,10 +144,13 @@ public class SentryReporter extends AbstractService<Reporter> implements Reporte
   public boolean canHandle(Reportable reportable) {
     return (
       configuration.isEnabled() &&
-      (reportable instanceof Metrics ||
-        (reportable instanceof Log && configuration.isReportLogs()) ||
-        (reportable instanceof MessageMetrics && configuration.isReportMessageMetrics()) ||
-        (reportable instanceof EndpointStatus && configuration.isReportHealthChecks()))
+      switch (reportable) {
+        case Metrics ignored -> true;
+        case Log ignored -> configuration.isReportLogs();
+        case MessageMetrics ignored -> configuration.isReportMessageMetrics();
+        case EndpointStatus ignored -> configuration.isReportHealthChecks();
+        default -> false;
+      }
     );
   }
 }

@@ -18,7 +18,13 @@ package io.gravitee.reporter.sentry.mapper;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.gravitee.reporter.api.v4.common.MessageConnectorType;
 import io.gravitee.reporter.api.v4.common.MessageOperation;
@@ -157,9 +163,6 @@ class MessageMetricsMapperTest {
   }
 
   private ITransaction mockTransaction(MockedStatic<Sentry> sentryMock, SpanStatus status) {
-    ITransaction mockTx = mock(ITransaction.class);
-    when(mockTx.getStatus()).thenReturn(status);
-    sentryMock.when(() -> Sentry.startTransaction(anyString(), anyString(), any())).thenReturn(mockTx);
-    return mockTx;
+    return SentryTestSupport.mockTransaction(sentryMock, status);
   }
 }

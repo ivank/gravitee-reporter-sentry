@@ -25,6 +25,7 @@ import io.sentry.SentryLevel;
 import io.sentry.SpanStatus;
 import io.sentry.TransactionOptions;
 import io.sentry.protocol.Message;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +52,7 @@ public class MessageMetricsMapper {
    * @param metrics the async-message metrics batch
    */
   public void map(MessageMetrics metrics) {
-    String operation = metrics.getOperation() != null ? metrics.getOperation().name() : "UNKNOWN";
+    String operation = Optional.ofNullable(metrics.getOperation()).map(Enum::name).orElse("UNKNOWN");
     String connectorId = metrics.getConnectorId() != null ? metrics.getConnectorId() : "unknown";
     String txName = operation + " " + connectorId;
 
@@ -66,15 +67,15 @@ public class MessageMetricsMapper {
       tx.setData("message.operation", operation);
       tx.setData(
         "message.connector_type",
-        metrics.getConnectorType() != null ? metrics.getConnectorType().name() : null
+        Optional.ofNullable(metrics.getConnectorType()).map(Enum::name).orElse(null)
       );
       tx.setData("message.connector_id", connectorId);
       tx.setData("message.count", metrics.getCount());
       tx.setData("message.error_count", metrics.getErrorCount());
       tx.setData("message.content_length", metrics.getContentLength());
 
-      setTagIfNotNull(tx, "gravitee.api_id", metrics.getApiId());
-      setTagIfNotNull(tx, "gravitee.api_name", metrics.getApiName());
+      SentryTags.ifPresent(metrics.getApiId(), v -> tx.setTag("gravitee.api_id", v));
+      SentryTags.ifPresent(metrics.getApiName(), v -> tx.setTag("gravitee.api_name", v));
 
       tx.setMeasurement("gateway_latency", metrics.getGatewayLatencyMs(), MeasurementUnit.Duration.MILLISECOND);
       // Count metrics have no unit — use the 2-arg overload
@@ -98,24 +99,12 @@ public class MessageMetricsMapper {
     event.setTransaction(txName);
 
     Message msg = new Message();
-    msg.setMessage("Message error on " + txName + " (errorCount=" + metrics.getErrorCount() + ")");
+    msg.setMessage("Message error on %s (errorCount=%d)".formatted(txName, metrics.getErrorCount()));
     event.setMessage(msg);
 
-    setTagIfNotNull(event, "gravitee.api_id", metrics.getApiId());
-    setTagIfNotNull(event, "gravitee.api_name", metrics.getApiName());
+    SentryTags.ifPresent(metrics.getApiId(), v -> event.setTag("gravitee.api_id", v));
+    SentryTags.ifPresent(metrics.getApiName(), v -> event.setTag("gravitee.api_name", v));
 
     Sentry.captureEvent(event);
-  }
-
-  private static void setTagIfNotNull(ITransaction tx, String key, String value) {
-    if (value != null) {
-      tx.setTag(key, value);
-    }
-  }
-
-  private static void setTagIfNotNull(SentryEvent event, String key, String value) {
-    if (value != null) {
-      event.setTag(key, value);
-    }
   }
 }

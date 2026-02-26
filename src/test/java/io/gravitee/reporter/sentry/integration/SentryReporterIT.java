@@ -19,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -195,13 +194,12 @@ class SentryReporterIT {
     //   httpbin (independent)
     Startables.deepStart(gateway, httpbin).join();
 
-    ObjectMapper objectMapper = new ObjectMapper();
     gatewayBase = "http://localhost:" + gateway.getMappedPort(8082);
     String mgmtBase = "http://localhost:" + managementApi.getMappedPort(8083);
 
     http = HttpClient.newHttpClient();
-    mgmtHelper = new ManagementApiHelper(mgmtBase, objectMapper);
-    sentryClient = new SentryApiClient(sentryToken, sentryOrg, sentryProject, objectMapper);
+    mgmtHelper = new ManagementApiHelper(mgmtBase);
+    sentryClient = new SentryApiClient(sentryToken, sentryOrg, sentryProject);
 
     // Create two APIs via Management REST — each returns a unique UUID which becomes
     // the gravitee.api_id tag on every Sentry event for that API.
