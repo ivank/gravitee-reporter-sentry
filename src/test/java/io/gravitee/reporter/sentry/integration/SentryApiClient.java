@@ -124,10 +124,58 @@ class SentryApiClient {
     }
   }
 
+  /**
+   * Polls the Sentry Discover API until a transaction with {@code txName} that belongs to
+   * {@code traceId} is found, or {@code timeout} elapses.
+   *
+   * <p>This is the assertion for distributed trace propagation: if the gateway correctly called
+   * {@code Sentry.continueTrace(sentryTrace, baggage)}, the resulting transaction will carry the
+   * same trace ID as the incoming {@code sentry-trace} header. If trace propagation is broken,
+   * the transaction lands on a fresh orphaned trace and this method times out.
+   *
+   * @param traceId  the 32-hex-char Sentry trace ID from the outbound {@code sentry-trace} header
+   * @param txName   expected transaction name, e.g. {@code "GET /sentry-it-trace"}
+   * @param timeout  maximum time to wait
+   * @return list of matching event nodes (never empty)
+   */
+  List<JsonNode> pollForTransactionInTrace(String traceId, String txName, Duration timeout) {
+    String query = "transaction:\"%s\" trace:%s".formatted(txName, traceId);
+    LOGGER.info("Polling Sentry for transaction in trace: {}", query);
+    await("Sentry transaction in trace: " + traceId)
+      .atMost(timeout)
+      .pollInterval(Duration.ofSeconds(5))
+      .until(() -> {
+        try {
+          return !fetchTransactionsByTrace(traceId, txName).isEmpty();
+        } catch (Exception e) {
+          LOGGER.warn("Transient error polling Sentry transactions: {}", e.getMessage());
+          return false;
+        }
+      });
+    try {
+      return fetchTransactionsByTrace(traceId, txName);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to fetch Sentry transactions after polling succeeded", e);
+    }
+  }
+
   // ---- Private helpers ----------------------------------------------------------------
 
   private List<JsonNode> fetchTransactions(String query) throws Exception {
     Response<JsonNode> resp = api.getEvents(orgSlug, "transactions", query, List.of("id", "transaction"), 5).execute();
+    if (!resp.isSuccessful()) {
+      LOGGER.warn("Sentry events API returned {}", resp.code());
+      return List.of();
+    }
+    JsonNode data = resp.body().path("data");
+    return data.isArray() ? StreamSupport.stream(data.spliterator(), false).toList() : List.of();
+  }
+
+  private List<JsonNode> fetchTransactionsByTrace(String traceId, String txName) throws Exception {
+    String query = "transaction:\"%s\" trace:%s".formatted(txName, traceId);
+    Response<JsonNode> resp = api
+      .getEvents(orgSlug, "transactions", query, List.of("id", "transaction", "trace"), 5)
+      .execute();
     if (!resp.isSuccessful()) {
       LOGGER.warn("Sentry events API returned {}", resp.code());
       return List.of();
