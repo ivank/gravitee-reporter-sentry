@@ -18,6 +18,8 @@
  */
 package io.gravitee.reporter.sentry.mapper;
 
+import io.gravitee.reporter.api.common.Request;
+import io.gravitee.reporter.api.v4.log.Log;
 import io.gravitee.reporter.api.v4.metric.Metrics;
 import io.gravitee.reporter.sentry.config.SentryReporterConfiguration;
 import io.sentry.IScope;
@@ -28,9 +30,14 @@ import io.sentry.SentryEvent;
 import io.sentry.SentryLevel;
 import io.sentry.SentryNanotimeDate;
 import io.sentry.SpanStatus;
+import io.sentry.TransactionContext;
 import io.sentry.TransactionOptions;
 import io.sentry.protocol.Message;
+import io.sentry.protocol.TransactionNameSource;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -79,7 +86,12 @@ public class MetricsToSentryMapper {
     TransactionOptions opts = new TransactionOptions();
     opts.setStartTimestamp(toSentryDate(startMs));
 
-    ITransaction tx = Sentry.startTransaction(txName, "http.server", opts);
+    TransactionContext txContext = Sentry.continueTrace(extractSentryTrace(metrics), extractBaggage(metrics));
+    txContext.setName(txName);
+    txContext.setOperation("http.server");
+    txContext.setTransactionNameSource(TransactionNameSource.ROUTE);
+
+    ITransaction tx = Sentry.startTransaction(txContext, opts);
     try {
       tx.setStatus(SentryStatusMapper.fromHttpStatus(metrics.getStatus()));
 
@@ -129,6 +141,54 @@ public class MetricsToSentryMapper {
       long endMs = startMs + metrics.getGatewayResponseTimeMs();
       tx.finish(tx.getStatus(), toSentryDate(endMs));
     }
+  }
+
+  /**
+   * Extracts the {@code sentry-trace} header from the embedded log's entrypoint request headers,
+   * falling back to {@code customMetrics} (populated via an "Assign Metrics" policy).
+   * Returns {@code null} when neither source is available, so {@link Sentry#continueTrace} will
+   * produce a fresh trace instead of continuing an existing one.
+   */
+  private static String extractSentryTrace(Metrics metrics) {
+    String header = headerFromLog(metrics, "sentry-trace");
+    if (header != null) return header;
+    Map<String, String> custom = metrics.getCustomMetrics();
+    return custom != null ? custom.get("sentry-trace") : null;
+  }
+
+  /**
+   * Extracts {@code baggage} header values in the same priority order as
+   * {@link #extractSentryTrace}.
+   */
+  private static List<String> extractBaggage(Metrics metrics) {
+    Log log = metrics.getLog();
+    if (log != null) {
+      Request req = log.getEntrypointRequest();
+      if (req != null) {
+        var headers = req.getHeaders();
+        if (headers != null) {
+          List<String> values = headers.getAll("baggage");
+          if (values != null && !values.isEmpty()) return values;
+        }
+      }
+    }
+    Map<String, String> custom = metrics.getCustomMetrics();
+    if (custom != null) {
+      String baggage = custom.get("baggage");
+      if (baggage != null && !baggage.isBlank()) return List.of(baggage);
+    }
+    return Collections.emptyList();
+  }
+
+  private static String headerFromLog(Metrics metrics, String name) {
+    Log log = metrics.getLog();
+    if (log == null) return null;
+    Request req = log.getEntrypointRequest();
+    if (req == null) return null;
+    var headers = req.getHeaders();
+    if (headers == null) return null;
+    String value = headers.get(name);
+    return (value != null && !value.isBlank()) ? value : null;
   }
 
   private void captureErrorEvent(Metrics metrics, String txName) {

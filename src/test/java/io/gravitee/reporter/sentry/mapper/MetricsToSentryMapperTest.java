@@ -31,6 +31,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.gravitee.common.http.HttpMethod;
+import io.gravitee.gateway.api.http.HttpHeaders;
+import io.gravitee.reporter.api.common.Request;
+import io.gravitee.reporter.api.v4.log.Log;
 import io.gravitee.reporter.api.v4.metric.Metrics;
 import io.gravitee.reporter.sentry.config.SentryReporterConfiguration;
 import io.sentry.IScope;
@@ -38,6 +41,8 @@ import io.sentry.ITransaction;
 import io.sentry.Sentry;
 import io.sentry.SentryEvent;
 import io.sentry.SpanStatus;
+import io.sentry.TransactionContext;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,7 +82,8 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(() -> Sentry.startTransaction(eq("GET /api/v1/users"), eq("http.server"), any()));
+      sentryMock.verify(() -> Sentry.continueTrace(eq(null), eq(List.of())));
+      sentryMock.verify(() -> Sentry.startTransaction(any(TransactionContext.class), any()));
       verify(mockTx).setStatus(SpanStatus.OK);
       verify(mockTx).finish(any(), any());
     }
@@ -192,7 +198,8 @@ class MetricsToSentryMapperTest {
 
       mapper.map(metrics, scope);
 
-      sentryMock.verify(() -> Sentry.startTransaction(eq("DELETE /fallback/path"), eq("http.server"), any()));
+      sentryMock.verify(() -> Sentry.continueTrace(eq(null), eq(List.of())));
+      sentryMock.verify(() -> Sentry.startTransaction(any(TransactionContext.class), any()));
     }
   }
 
@@ -214,6 +221,85 @@ class MetricsToSentryMapperTest {
 
       // finish must still be called
       verify(mockTx, atLeastOnce()).finish(any(), any());
+    }
+  }
+
+  // --- trace propagation tests ---
+
+  @Test
+  void map_withSentryTraceHeaderInLog_continuesParentTrace() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      mockTransaction(sentryMock, SpanStatus.OK);
+
+      HttpHeaders headers = HttpHeaders.create();
+      headers.set("sentry-trace", "8d64b1eb0d94496cbde363a82ce4ea68-98f1f143539c1a0d-1");
+      headers.set("baggage", "sentry-environment=dev,sentry-trace_id=8d64b1eb0d94496cbde363a82ce4ea68");
+
+      Request request = new Request();
+      request.setHeaders(headers);
+
+      Log log = Log.builder().requestId("req-1").build();
+      log.setEntrypointRequest(request);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.POST)
+        .uri("/emr/fhir/R4/$graphql")
+        .status(200)
+        .gatewayResponseTimeMs(100L)
+        .build();
+      metrics.setLog(log);
+
+      mapper.map(metrics, scope);
+
+      sentryMock.verify(() ->
+        Sentry.continueTrace(
+          eq("8d64b1eb0d94496cbde363a82ce4ea68-98f1f143539c1a0d-1"),
+          eq(List.of("sentry-environment=dev,sentry-trace_id=8d64b1eb0d94496cbde363a82ce4ea68"))
+        )
+      );
+    }
+  }
+
+  @Test
+  void map_withSentryTraceInCustomMetrics_continuesParentTrace() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      mockTransaction(sentryMock, SpanStatus.OK);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/api/v1/test")
+        .status(200)
+        .gatewayResponseTimeMs(50L)
+        .build();
+      metrics.addCustomMetric("sentry-trace", "aaaabbbb0000111122223333444455-deadbeef12345678-1");
+      metrics.addCustomMetric("baggage", "sentry-environment=prod");
+
+      mapper.map(metrics, scope);
+
+      sentryMock.verify(() ->
+        Sentry.continueTrace(
+          eq("aaaabbbb0000111122223333444455-deadbeef12345678-1"),
+          eq(List.of("sentry-environment=prod"))
+        )
+      );
+    }
+  }
+
+  @Test
+  void map_withNullLog_callsContinueTraceWithNulls() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      mockTransaction(sentryMock, SpanStatus.OK);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/api/v1/test")
+        .status(200)
+        .gatewayResponseTimeMs(50L)
+        .build();
+
+      mapper.map(metrics, scope);
+
+      sentryMock.verify(() -> Sentry.continueTrace(eq(null), eq(List.of())));
     }
   }
 
