@@ -93,6 +93,84 @@ Transactions produced by this reporter follow
 Numeric IDs and UUIDs in paths are replaced with `{id}` to reduce cardinality
 (e.g. `/users/123/orders` → `/users/{id}/orders`).
 
+## Distributed trace propagation
+
+When a browser or upstream service sends a request with Sentry trace headers, this reporter
+can attach the gateway transaction as a child of the caller's trace so the full
+request path appears in a single Sentry waterfall:
+
+```
+webapp (project: frontend)
+  └── POST /emr/fhir/R4/$graphql  (http.client, 4199ms)
+        └── POST /emr/fhir/R4/$graphql  (http.server, 4096ms)  ← gateway span, linked
+```
+
+Without propagation, the gateway transaction lands on its own disconnected trace.
+
+The reporter reads two standard headers: `sentry-trace` (carries the parent trace/span ID and
+sampling flag) and `baggage` (carries Sentry baggage for the Dynamic Sampling Context). Both are
+set automatically by the Sentry browser and server SDKs.
+
+### Option 1 — Enable request-header logging on the API (recommended)
+
+The gateway populates `metrics.log` only when logging is enabled for the API. With logging on,
+the reporter reads the headers directly from the incoming request.
+
+In the APIM Console, open the API → **Analytics** → **Logging**, enable logging, and set the
+mode to include at minimum **Request headers** (body logging is not required):
+
+```yaml
+# Equivalent gravitee.yml / API definition snippet
+analytics:
+  logging:
+    mode:
+      entrypoint: true   # capture entrypoint request headers
+    content:
+      headers: true      # headers are enough — body is optional
+      payload: false
+```
+
+This is the zero-policy approach: no extra policy is needed on the API.
+
+### Option 2 — Assign Metrics policy (when logging cannot be enabled)
+
+If you cannot enable logging on an API (e.g. to avoid capturing sensitive bodies), add a
+**Transform Headers** or **Assign Metrics** policy in the request phase to copy the trace headers
+into Gravitee custom metrics. The reporter reads these as a fallback.
+
+**Assign Metrics policy** (APIM v4 policy JSON):
+
+```json
+{
+  "name": "Assign Metrics",
+  "enabled": true,
+  "policy": "policy-assign-metrics",
+  "configuration": {
+    "metrics": [
+      {
+        "name": "sentry-trace",
+        "value": "{#request.headers['sentry-trace'][0]}"
+      },
+      {
+        "name": "baggage",
+        "value": "{#request.headers['baggage'][0]}"
+      }
+    ]
+  }
+}
+```
+
+Add this policy to the **Request** phase of each API you want to trace. The reporter checks
+`customMetrics["sentry-trace"]` and `customMetrics["baggage"]` if the log-based path returns
+nothing.
+
+### Fallback behaviour
+
+When neither source provides a `sentry-trace` header (logging disabled and no policy configured),
+`Sentry.continueTrace` receives `null` and returns a fresh `TransactionContext`. The transaction
+is recorded normally but is not linked to the caller's trace. This was the behaviour before
+trace propagation was added.
+
 ## Linting
 
 using maven prettier plugin
