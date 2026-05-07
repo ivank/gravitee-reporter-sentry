@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
 import io.sentry.ITransaction;
 import io.sentry.Sentry;
 import io.sentry.SpanStatus;
+import io.sentry.TransactionContext;
 import org.mockito.MockedStatic;
 
 /**
@@ -45,6 +46,11 @@ final class SentryTestSupport {
   static ITransaction mockTransaction(MockedStatic<Sentry> sentryMock, SpanStatus status) {
     ITransaction mockTx = mock(ITransaction.class);
     when(mockTx.getStatus()).thenReturn(status);
+    TransactionContext dummyContext = new TransactionContext("", "http.server");
+    sentryMock.when(() -> Sentry.continueTrace(any(), any())).thenReturn(dummyContext);
+    // MetricsToSentryMapper uses continueTrace + startTransaction(TransactionContext, ...)
+    sentryMock.when(() -> Sentry.startTransaction(any(TransactionContext.class), any())).thenReturn(mockTx);
+    // MessageMetricsMapper still uses startTransaction(String, String, TransactionOptions)
     sentryMock.when(() -> Sentry.startTransaction(anyString(), anyString(), any())).thenReturn(mockTx);
     return mockTx;
   }

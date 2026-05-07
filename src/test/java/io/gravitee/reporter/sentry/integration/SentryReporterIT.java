@@ -104,6 +104,7 @@ class SentryReporterIT {
   // API UUIDs returned by Management REST — used as Sentry tag filters.
   private static String successApiId;
   private static String errorApiId;
+  private static String tracePropagationApiId;
 
   // Re-usable HTTP client for sending traffic through the gateway.
   private static HttpClient http;
@@ -208,6 +209,13 @@ class SentryReporterIT {
     // the gravitee.api_id tag on every Sentry event for that API.
     successApiId = mgmtHelper.createAndDeployApi("Sentry IT Success", "/sentry-it-ok", "http://httpbin:8080/get");
     errorApiId = mgmtHelper.createAndDeployApi("Sentry IT Error", "/sentry-it-err", "http://httpbin:8080/status/500");
+    // Logging enabled so metrics.getLog().getEntrypointRequest().getHeaders() is populated,
+    // which is required for the reporter to read sentry-trace/baggage and continue the trace.
+    tracePropagationApiId = mgmtHelper.createAndDeployApiWithLogging(
+      "Sentry IT Trace",
+      "/sentry-it-trace",
+      "http://httpbin:8080/get"
+    );
 
     // Wait for the gateway to sync both APIs. The gateway polls MongoDB
     // every ~5 s; Awaitility retries until a non-404 response is received.
@@ -233,6 +241,20 @@ class SentryReporterIT {
           http
             .send(
               HttpRequest.newBuilder().uri(URI.create(gatewayBase + "/sentry-it-err")).build(),
+              HttpResponse.BodyHandlers.discarding()
+            )
+            .statusCode() !=
+          404
+      );
+
+    await("gateway to serve trace-propagation API")
+      .atMost(Duration.ofSeconds(30))
+      .pollInterval(Duration.ofSeconds(3))
+      .until(
+        () ->
+          http
+            .send(
+              HttpRequest.newBuilder().uri(URI.create(gatewayBase + "/sentry-it-trace")).build(),
               HttpResponse.BodyHandlers.discarding()
             )
             .statusCode() !=
@@ -273,6 +295,49 @@ class SentryReporterIT {
 
     assertThat(events).isNotEmpty();
     assertThat(events.get(0).path("transaction").asText()).isEqualTo("GET /sentry-it-ok");
+  }
+
+  /**
+   * Verifies that the gateway transaction is linked to the caller's distributed trace when the
+   * request carries {@code sentry-trace} and {@code baggage} headers.
+   *
+   * <p>The API used here has entrypoint request-header logging enabled, which populates
+   * {@code metrics.getLog().getEntrypointRequest().getHeaders()} so the reporter can extract
+   * the trace headers and pass them to {@code Sentry.continueTrace()}.
+   *
+   * <p>The assertion queries Sentry for a transaction whose {@code trace} field equals the
+   * trace ID from the outbound header. If trace propagation is broken, the transaction lands
+   * on an orphaned trace and the poll times out.
+   */
+  @Test
+  void shouldLinkGatewayTransactionToIncomingTrace() throws Exception {
+    // A deterministic trace ID — unique enough per test run to avoid collisions with other runs.
+    String traceId = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4";
+    String spanId = "a1b2c3d4e5f6a1b2";
+    String sentryTrace = traceId + "-" + spanId + "-1";
+    String baggage = "sentry-environment=integration-test,sentry-trace_id=" + traceId + ",sentry-sample_rand=0.123";
+
+    var response = http.send(
+      HttpRequest.newBuilder()
+        .uri(URI.create(gatewayBase + "/sentry-it-trace"))
+        .header("sentry-trace", sentryTrace)
+        .header("baggage", baggage)
+        .build(),
+      HttpResponse.BodyHandlers.discarding()
+    );
+    assertThat(response.statusCode()).isEqualTo(200);
+
+    // The transaction must appear under the same trace ID that was sent in the header.
+    // If continueTrace() worked, Sentry stored the transaction with trace=traceId.
+    // If it was ignored, the transaction would have a fresh trace ID and this would time out.
+    List<JsonNode> events = sentryClient.pollForTransactionInTrace(
+      traceId,
+      "GET /sentry-it-trace",
+      Duration.ofSeconds(60)
+    );
+
+    assertThat(events).isNotEmpty();
+    assertThat(events.get(0).path("trace").asText()).isEqualTo(traceId);
   }
 
   /**

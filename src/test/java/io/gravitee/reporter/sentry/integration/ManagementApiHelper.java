@@ -79,8 +79,21 @@ class ManagementApiHelper {
    * @return the API UUID assigned by the Management API (used as the Sentry filter tag)
    */
   String createAndDeployApi(String name, String path, String backendUrl) {
+    return createAndDeployApi(name, path, backendUrl, false);
+  }
+
+  /**
+   * Like {@link #createAndDeployApi} but enables entrypoint request-header logging so that
+   * {@code metrics.getLog().getEntrypointRequest().getHeaders()} is populated at report time.
+   * Required for distributed trace propagation via {@code sentry-trace}/{@code baggage} headers.
+   */
+  String createAndDeployApiWithLogging(String name, String path, String backendUrl) {
+    return createAndDeployApi(name, path, backendUrl, true);
+  }
+
+  private String createAndDeployApi(String name, String path, String backendUrl, boolean withLogging) {
     try {
-      Response<JsonNode> createResp = api.createApi(buildApiBody(name, path, backendUrl)).execute();
+      Response<JsonNode> createResp = api.createApi(buildApiBody(name, path, backendUrl, withLogging)).execute();
       assertStatus("create API '" + name + "'", createResp, 201);
       String apiId = createResp.body().path("id").asText();
       LOGGER.info("Created API '{}' → id={}", name, apiId);
@@ -136,7 +149,20 @@ class ManagementApiHelper {
     return RequestBody.create(JSON, body);
   }
 
-  private RequestBody buildApiBody(String name, String path, String backendUrl) {
+  private RequestBody buildApiBody(String name, String path, String backendUrl, boolean withLogging) {
+    String analyticsBlock = withLogging
+      ? """
+      ,
+      "analytics": {
+        "enabled": true,
+        "logging": {
+          "mode": { "entrypoint": true, "endpoint": false },
+          "phase": { "request": true, "response": false },
+          "content": { "headers": true, "payload": false }
+        }
+      }
+      """
+      : "";
     return json(
       """
       {
@@ -166,9 +192,9 @@ class ManagementApiHelper {
               }
             ]
           }
-        ]
+        ]%s
       }
-      """.formatted(name, path, backendUrl)
+      """.formatted(name, path, backendUrl, analyticsBlock)
     );
   }
 

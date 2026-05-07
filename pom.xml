@@ -127,6 +127,13 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Gateway API: HttpHeaders used by reporter-api common.Request -->
+        <dependency>
+            <groupId>io.gravitee.gateway</groupId>
+            <artifactId>gravitee-gateway-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- SLF4J: logging facade available from gateway runtime -->
         <dependency>
             <groupId>org.slf4j</groupId>
