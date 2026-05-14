@@ -22,20 +22,24 @@
 
   <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+      <!-- No [%thread] — keeps lines compact; container forwards include their own context. -->
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} -- %msg%n</pattern>
     </encoder>
   </appender>
 
-  <!-- Container stdout/stderr forwarded via Slf4jLogConsumer — keep at INFO -->
-  <logger name="tc" level="ERROR"/>
+  <!-- Container output forwarded via filteredLogConsumer in SentryReporterIT.
+       The filter decides what to forward; logger level just needs to permit INFO/ERROR. -->
+  <logger name="tc" level="INFO"/>
 
-  <!-- Testcontainers internals — suppress wire noise -->
+  <!-- Testcontainers internals: lifecycle messages (container start/stop) live at INFO.
+       Wire-level chatter from Docker and HTTP demoted to WARN. -->
   <logger name="org.testcontainers" level="INFO"/>
-  <logger name="com.github.dockerjava" level="INFO"/>
-  <logger name="org.apache.hc" level="INFO"/>
+  <logger name="com.github.dockerjava" level="WARN"/>
+  <logger name="org.apache.hc" level="WARN"/>
+  <logger name="org.eclipse.jetty" level="WARN"/>
 
-  <!-- Test classes -->
-  <logger name="io.gravitee.reporter.sentry" level="INFO"/>
+  <!-- Our code: full visibility into the reporter at DEBUG when running tests. -->
+  <logger name="io.gravitee.reporter.sentry" level="DEBUG"/>
 
   <root level="WARN">
     <appender-ref ref="CONSOLE"/>
