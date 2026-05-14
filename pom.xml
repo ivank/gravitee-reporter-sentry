@@ -252,12 +252,28 @@
         </resources>
 
         <plugins>
-            <!-- Compiler: Java 21 -->
+            <!--
+              Explicit propertiesEncoding=UTF-8 on the resources plugin silences:
+                "The encoding used to copy filtered properties files have not been set..."
+              The plugin only reads this from its own config (or the -Dmaven.resources.propertiesEncoding
+              system property) — setting <project.build.propertiesEncoding> as a project property is
+              not enough.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <configuration>
+                    <propertiesEncoding>UTF-8</propertiesEncoding>
+                </configuration>
+            </plugin>
+
+            <!-- Compiler: Java 21. proc=none silences javac's "annotation processing is enabled" forward-compat note. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <release>21</release>
+                    <proc>none</proc>
                 </configuration>
             </plugin>
 
@@ -273,8 +289,15 @@
                       ByteBuddy (bundled in Mockito) declares support up to the previous Java GA
                       release. Set experimental flag to allow it to run on newer JDK versions.
                       Also open internal packages so ByteBuddy can instrument classes.
+
+                      -javaagent loads byte-buddy-agent at JVM startup so Mockito reuses it instead
+                      of attaching one dynamically. JDK 21 prints "WARNING: Dynamic loading of agents
+                      will be disallowed by default in a future release" otherwise; pre-loading is the
+                      forward-compatible fix. The path is supplied by maven-dependency-plugin's
+                      properties goal (see plugin below).
                     -->
                     <argLine>
+                        -javaagent:${net.bytebuddy:byte-buddy-agent:jar}
                         -Dnet.bytebuddy.experimental=true
                         --add-opens java.base/java.lang=ALL-UNNAMED
                         --add-opens java.base/java.util=ALL-UNNAMED
@@ -282,7 +305,12 @@
                 </configuration>
             </plugin>
 
-            <!-- Copy runtime (non-provided) deps to target/dependencies/ for the ZIP -->
+            <!--
+              maven-dependency-plugin:
+                - copy-dependencies: copies runtime deps to target/dependencies/ for the plugin ZIP.
+                - properties: resolves every dependency to a Maven property named
+                  ${groupId:artifactId:type}, used by surefire/failsafe argLine for -javaagent.
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -298,6 +326,13 @@
                             <includeScope>runtime</includeScope>
                             <excludeScope>provided</excludeScope>
                         </configuration>
+                    </execution>
+                    <execution>
+                        <id>resolve-byte-buddy-agent-path</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -464,7 +499,13 @@
                                 <SENTRY_TEST_ORG>${SENTRY_TEST_ORG}</SENTRY_TEST_ORG>
                                 <SENTRY_TEST_PROJECT>${SENTRY_TEST_PROJECT}</SENTRY_TEST_PROJECT>
                             </systemPropertyVariables>
-                            <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                            <!--
+                              -javaagent loads byte-buddy-agent at JVM startup (see surefire config
+                              above for why this matters on JDK 21+). The IT JVM only spawns one
+                              container-host process, but we still want consistent agent loading
+                              and the JVM warnings out of the test log.
+                            -->
+                            <argLine>-javaagent:${net.bytebuddy:byte-buddy-agent:jar} -Dnet.bytebuddy.experimental=true</argLine>
                         </configuration>
                     </plugin>
                 </plugins>

@@ -31,16 +31,18 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.containers.output.Slf4jLogConsumer;
+import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.MountableFile;
@@ -144,7 +146,7 @@ class SentryReporterIT {
       .withEnv("gravitee_services_core_http_host", "0.0.0.0")
       .withEnv("gravitee_services_core_http_authentication_type", "none")
       .dependsOn(mongodb)
-      .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.management-api")))
+      .withLogConsumer(filteredLogConsumer("management-api"))
       .waitingFor(Wait.forHttp("/_node/health").forPort(18083).forStatusCode(200));
 
     // 3. go-httpbin mock backend — actively maintained, same API as httpbin.
@@ -152,7 +154,7 @@ class SentryReporterIT {
       .withNetwork(NETWORK)
       .withNetworkAliases("httpbin")
       .withExposedPorts(8080)
-      .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.httpbin")))
+      .withLogConsumer(filteredLogConsumer("httpbin"))
       .waitingFor(Wait.forHttp("/get").forPort(8080).forStatusCode(200));
 
     // 4. Gravitee Gateway with the sentry reporter plugin.
@@ -190,7 +192,7 @@ class SentryReporterIT {
       .withEnv("gravitee_reporters_sentry_reportlogs", "false")
       .withEnv("gravitee_reporters_sentry_reportmessagemetrics", "false")
       .dependsOn(managementApi)
-      .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("tc.gateway")))
+      .withLogConsumer(filteredLogConsumer("gateway"))
       .waitingFor(Wait.forHttp("/_node/health").forPort(18082).forStatusCode(200));
 
     // deepStart resolves the dependsOn chains:
@@ -365,5 +367,105 @@ class SentryReporterIT {
 
     assertThat(issues).isNotEmpty();
     assertThat(issues.get(0).path("level").asText()).isEqualTo("error");
+  }
+
+  /**
+   * Builds a Testcontainers log consumer that drastically trims forwarded container output.
+   *
+   * <p>The default {@link org.testcontainers.containers.output.Slf4jLogConsumer} forwards every
+   * line from each container, which produces thousands of lines of Spring/Jetty/Mongo bootstrap
+   * noise for a single IT run. This consumer keeps only the lines that materially help when
+   * debugging:
+   * <ul>
+   *   <li>Anything at {@code ERROR} level, except a small explicit allow-list of known harmless
+   *       lines emitted during normal startup (e.g. Gravitee's K8s probe error which fires when
+   *       the gateway is not running inside Kubernetes).</li>
+   *   <li>Anything mentioning our reporter ({@code io.gravitee.reporter.sentry} or
+   *       {@code SentryReporter}) at {@code INFO} — so the reporter's own startup signal and any
+   *       transaction/error reporting it logs survives the filter.</li>
+   *   <li>{@code ApiManagerImpl} deploy/undeploy events — these confirm Gravitee picked up the
+   *       APIs Terraform/Management-API created. Lines unrelated to API deployment (shared policy
+   *       groups, etc.) are dropped.</li>
+   * </ul>
+   *
+   * <p>Each forwarded line has the duplicated {@code HH:mm:ss.SSS [thread]} prefix stripped, since
+   * SLF4J adds its own timestamp. The exclusion list is explicit (no regex catch-alls) and each
+   * entry has a comment explaining what it suppresses, so a future real error matching one of
+   * these signatures won't be silently swallowed.
+   */
+  private static Consumer<OutputFrame> filteredLogConsumer(String prefix) {
+    Logger logger = LoggerFactory.getLogger("tc." + prefix);
+    return frame -> {
+      String raw = frame.getUtf8String();
+      if (raw == null || raw.isBlank()) {
+        return;
+      }
+      // Each frame can contain multiple newline-separated log records.
+      for (String line : raw.split("\\R")) {
+        if (line.isBlank()) {
+          continue;
+        }
+        String stripped = stripTimestampPrefix(line);
+        if (isError(line)) {
+          // Suppress known benign ERROR lines from Gravitee boot. Everything else surfaces.
+          if (isKnownHarmlessError(stripped)) {
+            continue;
+          }
+          logger.error("{}", stripped);
+        } else if (isReporterSignal(stripped) || isApiDeploymentEvent(stripped)) {
+          logger.info("{}", stripped);
+        }
+        // Otherwise drop the line.
+      }
+    };
+  }
+
+  private static boolean isError(String line) {
+    // Match the standard Logback level token. Avoid false positives on lines that merely
+    // contain the word "error" (e.g. URLs, payloads).
+    return line.contains(" ERROR ") || line.contains("ERROR ");
+  }
+
+  private static boolean isReporterSignal(String line) {
+    return line.contains("io.gravitee.reporter.sentry") || line.contains("SentryReporter");
+  }
+
+  private static boolean isApiDeploymentEvent(String line) {
+    // Only forward API-level deploy/undeploy logs from ApiManagerImpl. Shared policy group
+    // deploys for the same logger get filtered out — they're not relevant to our test.
+    return (
+      line.contains("ApiManagerImpl") && (line.contains("has been deployed") || line.contains("has been undeployed"))
+    );
+  }
+
+  private static boolean isKnownHarmlessError(String line) {
+    // Gravitee gateway probes Kubernetes config when not running in K8s; the resulting
+    // ERROR is expected and harmless in a Testcontainers run.
+    if (line.contains("KubernetesClientFactory") || line.contains("Unable to retrieve Kubernetes")) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Strips the leading {@code HH:mm:ss.SSS [thread-name]} that Gravitee/Spring services emit.
+   * SLF4J adds its own timestamp once we forward, so leaving the container's prefix produces a
+   * confusing double-timestamp.
+   */
+  private static String stripTimestampPrefix(String line) {
+    // Drop a trailing line-feed if the frame retained it.
+    String trimmed = line.endsWith("\n") ? line.substring(0, line.length() - 1) : line;
+    // Strip "HH:mm:ss.SSS " if present at the start.
+    if (trimmed.length() > 13 && trimmed.charAt(2) == ':' && trimmed.charAt(5) == ':' && trimmed.charAt(8) == '.') {
+      trimmed = trimmed.substring(13).stripLeading();
+    }
+    // Strip an immediately-following "[thread] " segment.
+    if (trimmed.startsWith("[")) {
+      int closer = trimmed.indexOf(']');
+      if (closer > 0 && closer + 1 < trimmed.length()) {
+        trimmed = trimmed.substring(closer + 1).stripLeading();
+      }
+    }
+    return trimmed;
   }
 }
