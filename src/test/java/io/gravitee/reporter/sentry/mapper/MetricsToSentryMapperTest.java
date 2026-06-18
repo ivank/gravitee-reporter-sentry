@@ -46,6 +46,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -169,6 +170,143 @@ class MetricsToSentryMapperTest {
       mapper.map(metrics, scope);
 
       sentryMock.verify(() -> Sentry.captureEvent(any(SentryEvent.class)), never());
+    }
+  }
+
+  // --- error event grouping (fingerprint) + message enrichment tests ---
+
+  @Test
+  void map_http5xx_setsFingerprintFromApiMethodRouteStatusAndErrorKey() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      when(config.isCaptureErrors()).thenReturn(true);
+      mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.POST)
+        .uri("/cms/items/articles?fields=id,title&limit=10")
+        .status(500)
+        .apiName("Cms")
+        .apiId("api-abc")
+        .errorKey("GATEWAY_ERROR")
+        .build();
+
+      mapper.map(metrics, scope);
+
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
+      sentryMock.verify(() -> Sentry.captureEvent(captor.capture()));
+      // Query string stripped from the route; api_name preferred over api_id.
+      assertThat(captor.getValue().getFingerprints()).containsExactly(
+        "Cms",
+        "POST",
+        "/cms/items/articles",
+        "500",
+        "GATEWAY_ERROR"
+      );
+    }
+  }
+
+  @Test
+  void map_http5xx_sameRouteDifferentQuery_producesSameFingerprint() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      when(config.isCaptureErrors()).thenReturn(true);
+      mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
+
+      Metrics m1 = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/cms/items/articles?fields=a")
+        .status(500)
+        .apiName("Cms")
+        .build();
+      Metrics m2 = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/cms/items/articles?fields=b&x=1")
+        .status(500)
+        .apiName("Cms")
+        .build();
+
+      mapper.map(m1, scope);
+      mapper.map(m2, scope);
+
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
+      sentryMock.verify(() -> Sentry.captureEvent(captor.capture()), times(2));
+      assertThat(captor.getAllValues().get(0).getFingerprints()).isEqualTo(
+        captor.getAllValues().get(1).getFingerprints()
+      );
+    }
+  }
+
+  @Test
+  void map_http5xx_nullApiName_fingerprintFallsBackToApiId_andAbsentErrorKeyBecomesNone() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      when(config.isCaptureErrors()).thenReturn(true);
+      mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/perms/check")
+        .status(503)
+        .apiId("api-perms")
+        .build();
+
+      mapper.map(metrics, scope);
+
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
+      sentryMock.verify(() -> Sentry.captureEvent(captor.capture()));
+      assertThat(captor.getValue().getFingerprints()).containsExactly(
+        "api-perms",
+        "GET",
+        "/perms/check",
+        "503",
+        "none"
+      );
+    }
+  }
+
+  @Test
+  void map_http5xx_messageIncludesErrorMessageWhenPresent() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      when(config.isCaptureErrors()).thenReturn(true);
+      mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.POST)
+        .uri("/emr/fhir/R4/Binary")
+        .status(504)
+        .apiName("Emr")
+        .errorKey("REQUEST_TIMEOUT")
+        .errorMessage("Upstream timed out after 30000ms")
+        .build();
+
+      mapper.map(metrics, scope);
+
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
+      sentryMock.verify(() -> Sentry.captureEvent(captor.capture()));
+      assertThat(captor.getValue().getMessage().getMessage())
+        .contains("HTTP 504")
+        .contains("POST /emr/fhir/R4/Binary")
+        .contains("REQUEST_TIMEOUT")
+        .contains("Upstream timed out after 30000ms");
+    }
+  }
+
+  @Test
+  void map_http5xx_transactionNameStripsQueryString() {
+    try (MockedStatic<Sentry> sentryMock = mockStatic(Sentry.class)) {
+      when(config.isCaptureErrors()).thenReturn(true);
+      mockTransaction(sentryMock, SpanStatus.INTERNAL_ERROR);
+
+      Metrics metrics = Metrics.builder()
+        .httpMethod(HttpMethod.GET)
+        .uri("/cms/items/articles?fields=id")
+        .status(500)
+        .apiName("Cms")
+        .build();
+
+      mapper.map(metrics, scope);
+
+      ArgumentCaptor<SentryEvent> captor = ArgumentCaptor.forClass(SentryEvent.class);
+      sentryMock.verify(() -> Sentry.captureEvent(captor.capture()));
+      assertThat(captor.getValue().getTransaction()).isEqualTo("GET /cms/items/articles").doesNotContain("?");
     }
   }
 
@@ -325,6 +463,23 @@ class MetricsToSentryMapperTest {
   @Test
   void sanitizePath_null_returnsNull() {
     assertThat(MetricsToSentryMapper.sanitizePath(null)).isNull();
+  }
+
+  // --- stripQuery tests ---
+
+  @Test
+  void stripQuery_removesQueryString() {
+    assertThat(MetricsToSentryMapper.stripQuery("/cms/items/articles?fields=id")).isEqualTo("/cms/items/articles");
+  }
+
+  @Test
+  void stripQuery_noQuery_unchanged() {
+    assertThat(MetricsToSentryMapper.stripQuery("/cms/items/articles")).isEqualTo("/cms/items/articles");
+  }
+
+  @Test
+  void stripQuery_null_returnsNull() {
+    assertThat(MetricsToSentryMapper.stripQuery(null)).isNull();
   }
 
   // Helper: sets up Sentry.startTransaction mock to return a transaction stub

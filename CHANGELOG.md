@@ -5,6 +5,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Gateway 5xx error events now group per endpoint instead of collapsing into one catch-all
+  issue.** `MetricsToSentryMapper.captureErrorEvent` emitted message-only events with no
+  fingerprint; with no exception attached, Sentry grouped them by the (identical) synthetic
+  stacktrace, merging every 5xx across all APIs and environments into a single issue. Events now
+  carry an explicit fingerprint: `[api, method, route, status, errorKey]` (API name falling back
+  to API id, error key falling back to `none`).
+
+### Changed
+
+- **Query strings are stripped from transaction names and error-event routes** — new `stripQuery`
+  helper, applied before `sanitizePath`. Previously the full query string survived in the
+  transaction name, producing unbounded transaction/issue cardinality (a distinct entry per unique
+  query string). The exact failing URL is preserved as the non-indexed `http.url` event extra.
+- **Error-event messages now include the gateway `errorMessage`** (`Metrics.getErrorMessage()`)
+  when present — e.g. `HTTP 504 on POST /emr/fhir/R4/Binary [REQUEST_TIMEOUT]: <message>` — and the
+  raw message is also attached as the non-indexed `gravitee.error_message` extra.
+
+---
+
 ## [0.2.0] — 2026-02-27
 
 ### Changed
