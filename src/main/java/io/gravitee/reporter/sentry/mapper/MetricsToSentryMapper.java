@@ -79,8 +79,10 @@ public class MetricsToSentryMapper {
    */
   public void map(Metrics metrics, IScope scope) {
     String method = Optional.ofNullable(metrics.getHttpMethod()).map(Enum::name).orElse("UNKNOWN");
-    String path = sanitizePath(metrics.getMappedPath() != null ? metrics.getMappedPath() : metrics.getUri());
-    String txName = method + " " + (path != null ? path : "/");
+    String rawPath = metrics.getMappedPath() != null ? metrics.getMappedPath() : metrics.getUri();
+    String route = sanitizePath(stripQuery(rawPath));
+    String routeName = route != null ? route : "/";
+    String txName = method + " " + routeName;
 
     long startMs = metrics.getTimestamp();
     TransactionOptions opts = new TransactionOptions();
@@ -131,7 +133,7 @@ public class MetricsToSentryMapper {
 
       // Capture an error event for 5xx responses if configured
       if (configuration.isCaptureErrors() && metrics.getStatus() >= 500) {
-        captureErrorEvent(metrics, txName);
+        captureErrorEvent(metrics, method, routeName);
       }
     } catch (Exception e) {
       // Reporters must never propagate exceptions — gateway stability takes priority.
@@ -191,7 +193,12 @@ public class MetricsToSentryMapper {
     return (value != null && !value.isBlank()) ? value : null;
   }
 
-  private void captureErrorEvent(Metrics metrics, String txName) {
+  private void captureErrorEvent(Metrics metrics, String method, String route) {
+    int status = metrics.getStatus();
+    String txName = method + " " + route;
+    String errorKey = metrics.getErrorKey();
+    String errorMessage = metrics.getErrorMessage();
+
     SentryEvent event = new SentryEvent();
     event.setLevel(SentryLevel.ERROR);
     event.setTransaction(txName);
@@ -199,17 +206,31 @@ public class MetricsToSentryMapper {
     Message msg = new Message();
     msg.setMessage(
       "HTTP " +
-        metrics.getStatus() +
+        status +
         " on " +
         txName +
-        (metrics.getErrorKey() != null ? " [" + metrics.getErrorKey() + "]" : "")
+        (errorKey != null ? " [" + errorKey + "]" : "") +
+        (errorMessage != null && !errorMessage.isBlank() ? ": " + errorMessage : "")
     );
     event.setMessage(msg);
 
-    event.setTag("http.status_code", String.valueOf(metrics.getStatus()));
+    // Explicit, stable grouping key. These are message-only events with no exception, so Sentry's
+    // default grouping falls back to the synthetic stacktrace — identical for every gateway error —
+    // collapsing all 5xx into one catch-all issue. Group instead by the API, endpoint, method,
+    // status, and the gateway's error classification.
+    String apiKey = Optional.ofNullable(metrics.getApiName())
+      .or(() -> Optional.ofNullable(metrics.getApiId()))
+      .orElse("unknown");
+    event.setFingerprints(List.of(apiKey, method, route, String.valueOf(status), errorKey != null ? errorKey : "none"));
+
+    event.setTag("http.status_code", String.valueOf(status));
     SentryTags.ifPresent(metrics.getApiId(), v -> event.setTag("gravitee.api_id", v));
     SentryTags.ifPresent(metrics.getApiName(), v -> event.setTag("gravitee.api_name", v));
-    SentryTags.ifPresent(metrics.getErrorKey(), v -> event.setTag("gravitee.error_key", v));
+    SentryTags.ifPresent(errorKey, v -> event.setTag("gravitee.error_key", v));
+    // Preserve the exact failing request (with query string) and upstream error text as non-indexed
+    // extras — useful for triage, but kept out of tags/fingerprint so they never inflate cardinality.
+    SentryTags.ifPresent(metrics.getUri(), v -> event.setExtra("http.url", v));
+    SentryTags.ifPresent(errorMessage, v -> event.setExtra("gravitee.error_message", v));
 
     Sentry.captureEvent(event);
   }
@@ -223,6 +244,22 @@ public class MetricsToSentryMapper {
       return null;
     }
     return ID_SEGMENT.matcher(path).replaceAll("{id}");
+  }
+
+  /**
+   * Removes the query string from a path, leaving only the route. {@code null}-safe.
+   * e.g. {@code /cms/items/articles?fields=id} → {@code /cms/items/articles}.
+   *
+   * <p>Query strings carry per-request values, not distinct endpoints, so they must be dropped
+   * before a path is used for transaction naming or error-event grouping — otherwise every unique
+   * query produces a distinct transaction/issue (unbounded cardinality).
+   */
+  static String stripQuery(String path) {
+    if (path == null) {
+      return null;
+    }
+    int q = path.indexOf('?');
+    return q >= 0 ? path.substring(0, q) : path;
   }
 
   /**
