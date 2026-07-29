@@ -132,7 +132,7 @@ class SentryReporterIT {
     mongodb = new MongoDBContainer("mongo:7.0").withNetwork(NETWORK).withNetworkAliases("mongodb");
 
     // 2. Gravitee Management API
-    managementApi = new GenericContainer<>("graviteeio/apim-management-api:4.9.13")
+    managementApi = new GenericContainer<>("graviteeio/apim-management-api:" + TestVersions.APIM)
       .withNetwork(NETWORK)
       .withNetworkAliases("management-api")
       .withExposedPorts(8083, 18083)
@@ -147,7 +147,12 @@ class SentryReporterIT {
       .withEnv("gravitee_services_core_http_authentication_type", "none")
       .dependsOn(mongodb)
       .withLogConsumer(filteredLogConsumer("management-api"))
-      .waitingFor(Wait.forHttp("/_node/health").forPort(18083).forStatusCode(200));
+      .waitingFor(
+        Wait.forHttp("/_node/health")
+          .forPort(18083)
+          .forStatusCode(200)
+          .withStartupTimeout(TestVersions.CONTAINER_STARTUP_TIMEOUT)
+      );
 
     // 3. go-httpbin mock backend — actively maintained, same API as httpbin.
     httpbin = new GenericContainer<>("mccutchen/go-httpbin")
@@ -160,7 +165,7 @@ class SentryReporterIT {
     // 4. Gravitee Gateway with the sentry reporter plugin.
     //    The plugin ZIP is mounted into the second plugins-ext directory.
     //    The node management API on port 18082 provides the health-check endpoint.
-    gateway = new GenericContainer<>("graviteeio/apim-gateway:4.9.13")
+    gateway = new GenericContainer<>("graviteeio/apim-gateway:" + TestVersions.APIM)
       .withCreateContainerCmdModifier(cmd -> cmd.withUser("root"))
       .withNetwork(NETWORK)
       .withAccessToHost(true)
@@ -193,7 +198,12 @@ class SentryReporterIT {
       .withEnv("gravitee_reporters_sentry_reportmessagemetrics", "false")
       .dependsOn(managementApi)
       .withLogConsumer(filteredLogConsumer("gateway"))
-      .waitingFor(Wait.forHttp("/_node/health").forPort(18082).forStatusCode(200));
+      .waitingFor(
+        Wait.forHttp("/_node/health")
+          .forPort(18082)
+          .forStatusCode(200)
+          .withStartupTimeout(TestVersions.CONTAINER_STARTUP_TIMEOUT)
+      );
 
     // deepStart resolves the dependsOn chains:
     //   mongodb → managementApi → gateway
